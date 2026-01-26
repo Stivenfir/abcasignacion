@@ -1,0 +1,22 @@
+services:
+  backend:
+    build: ./Back-End
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./Back-End:/app
+      - /app/node_modules
+    env_file:
+      - ./Back-End/.env
+
+  client:
+    build: ./client
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    env_file:
+      - ./client/.env
+    depends_on:
+      - backend
