@@ -30,14 +30,21 @@ export default function Login() {
       });
 
       let data = null;
-      try { data = await response.json(); } catch {}
+      try {
+        data = await response.json();
+      } catch {}
 
       if (response.ok) {
         setToken(data?.token);
+        localStorage.setItem("username", username);
+
+
+        const userRole =
+          username.toLowerCase() === "admin" ? "admin" : "empleado";
+        localStorage.setItem("userRole", userRole);
 
         setSuccessMessage(`✔ Bienvenido, ${username}`);
-        // ⬇️ dejamos el éxito visible un momento + transición más “premium”
-        setTimeout(() => navigate("/home"), 900);
+        setTimeout(() => navigate("/dashboard"), 900);
       } else {
         setError(data?.message || "Usuario o contraseña incorrectos");
       }
@@ -66,7 +73,11 @@ export default function Login() {
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.65, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+            transition={{
+              duration: 0.65,
+              delay: 0.1,
+              ease: [0.22, 1, 0.36, 1],
+            }}
             className="text-sm text-blue-200/90"
           >
             Sistema de Reserva de Puestos
@@ -87,7 +98,8 @@ export default function Login() {
             </h2>
 
             <p className="text-xl text-blue-100/90">
-              Hot-desking empresarial con trazabilidad, disponibilidad y control.
+              Hot-desking empresarial con trazabilidad, disponibilidad y
+              control.
             </p>
 
             {/* Mensaje de valor (branding) */}
