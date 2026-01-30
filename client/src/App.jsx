@@ -5,6 +5,7 @@ import Home from "./pages/Home";
 import Mapa from "./pages/Mapa";
 import { isAuthed } from "./auth";
 import { pageVariants, pageTransition } from "./animations/pageTransitions";
+import AdminDashboard from "./pages/admin/AdminDashboard";  
 
 function PrivateRoute({ children }) {
   return isAuthed() ? children : <Navigate to="/login" replace />;
@@ -50,6 +51,15 @@ function AppRoutes() {
             </PrivateRoute>
           }
         />
+
+        <Route  
+  path="/admin"  
+  element={  
+    <PrivateRoute>  
+      <AnimatedPage><AdminDashboard /></AnimatedPage>  
+    </PrivateRoute>  
+  }  
+/>
 
         <Route path="/" element={<Navigate to="/home" replace />} />
         <Route path="*" element={<Navigate to="/home" replace />} />

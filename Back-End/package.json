@@ -11,7 +11,9 @@
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
-    "ldapjs": "^3.0.7"
+    "jsonwebtoken": "^9.0.3",
+    "ldapjs": "^3.0.7",
+    "mssql": "^12.2.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.11"

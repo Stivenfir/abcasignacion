@@ -31,9 +31,7 @@ export default function LoginCard({
             </div>
           </div>
 
-          <span className="text-xs px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
-            LDAP
-          </span>
+
         </div>
 
         {/* Feedback */}
@@ -121,9 +119,6 @@ export default function LoginCard({
 
         {/* Footer text */}
         <div className="mt-6 pt-6 border-t border-gray-200 space-y-2">
-          <p className="text-sm text-gray-600 text-center">
-            Autenticación mediante LDAP corporativo
-          </p>
           <p className="text-xs text-gray-500 text-center">
             ¿Problemas para ingresar? Contacta a <b>TI</b>
           </p>
