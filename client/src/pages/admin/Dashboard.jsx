@@ -9,6 +9,15 @@ const cards = [
     icon: "🗺️",  
     gradient: "from-blue-50 to-blue-100",  
   },  
+
+    {    
+    to: "/areas",  // ← NUEVO CARD  
+    title: "Gestión de Áreas",    
+    description: "Administrar áreas por piso",    
+    icon: "📍",    
+    gradient: "from-purple-50 to-purple-100",    
+  },  
+  
   {  
     to: "/mis-reservas",  
     title: "Mis reservas",  
