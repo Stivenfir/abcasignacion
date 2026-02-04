@@ -52,8 +52,14 @@ async function ValidaUrs(usr, psw) {
       body: `CheckUsrABC=${usr}%20${psw}`  
     });  
       
-    const data = await response.text();  
-    return { success: true, data };  
+    const data = await response.text();
+    if(data.includes("distinguishedName")){
+      return { success: true, data: 'OK'}; 
+    }
+    else{
+      return { success: false, error: 'Credenciales inválidas' };
+    }  
+     
   } catch (error) {  
     console.error('Error validando usuario:', error);  
     return { success: false, error: error.message };  
