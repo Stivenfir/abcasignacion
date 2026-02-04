@@ -19,6 +19,17 @@ export default function Areas() {
   const [areaSeleccionada, setAreaSeleccionada] = useState(null);
   const canvasRef = useRef(null);
   const imagenRef = useRef(null);
+  const [vistaMapaCompleto, setVistaMapaCompleto] = useState(false);
+  const [modoDelimitacion, setModoDelimitacion] = useState(false);
+  const [areaPisoSeleccionada, setAreaPisoSeleccionada] = useState(null);
+  const normalizarRect = (r) => {
+    const x = Math.min(r.startX, r.endX);
+    const y = Math.min(r.startY, r.endY);
+    const width = Math.abs(r.endX - r.startX);
+    const height = Math.abs(r.endY - r.startY);
+    return { x, y, width, height };
+  };
+
   const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
   useEffect(() => {
@@ -88,74 +99,139 @@ export default function Areas() {
     setMensaje(null);
   };
 
-const handleAsignarArea = async (idArea) => {  
-  try {  
-    const token = localStorage.getItem("token");  
-      
-    const res = await fetch(`${API}/api/areas/piso`, {  
-      method: "POST",  
-      headers: {   
-        "Content-Type": "application/json",  
-        "Authorization": `Bearer ${token}`  
-      },  
-      body: JSON.stringify({ idArea, idPiso: pisoSeleccionado.IDPiso }),  
-    });  
-  
-    if (res.ok) {  
-      setMensaje({ tipo: "success", texto: "✓ Área asignada exitosamente" });  
-      cargarAreasPiso(pisoSeleccionado.IDPiso);  
-    } else if (res.status === 401) {  
-      setMensaje({ tipo: "error", texto: "✗ No autorizado. Inicia sesión nuevamente" });  
-    } else {  
-      setMensaje({ tipo: "error", texto: "✗ Error al asignar área" });  
-    }  
-  } catch (error) {  
-    setMensaje({ tipo: "error", texto: "✗ Error al asignar área" });  
-  }  
-};
+  const handleAsignarArea = async (idArea, nombreArea) => {
+    // Confirmación antes de asignar
+    if (!confirm(`¿Quieres añadir el área "${nombreArea}" a este piso?`))
+      return;
 
-const handleEliminarArea = async (idAreaPiso) => {  
-  if (!confirm("¿Estás seguro de eliminar esta área del piso?")) return;  
-  
-  try {  
-    const token = localStorage.getItem("token");  
-      
-    const res = await fetch(`${API}/api/areas/piso/${idAreaPiso}`, {  
-      method: "DELETE",  
-      headers: {  
-        "Authorization": `Bearer ${token}`  
-      }  
-    });  
-  
-    if (res.ok) {  
-      setMensaje({ tipo: "success", texto: "✓ Área eliminada exitosamente" });  
-      cargarAreasPiso(pisoSeleccionado.IDPiso);  
-    } else if (res.status === 401) {  
-      setMensaje({ tipo: "error", texto: "✗ No autorizado. Inicia sesión nuevamente" });  
-    } else {  
-      setMensaje({ tipo: "error", texto: "✗ Error al eliminar área" });  
-    }  
-  } catch (error) {  
-    setMensaje({ tipo: "error", texto: "✗ Error al eliminar área" });  
-  }  
-};
+    try {
+      const token = localStorage.getItem("token");
 
-const cargarPlano = async (idPiso) => {  
-  try {  
-    const res = await fetch(`${API}/api/pisos/plano/${idPiso}`);  
-    const data = await res.json();  
-      
-    if (data.success) {  
-      setPlanoUrl(`${API}${data.ruta}`);  
-      setPlanoVisible(true);  
-    } else {  
-      setMensaje({ tipo: 'error', texto: 'No hay plano disponible para este piso' });  
-    }  
-  } catch (error) {  
-    console.error('Error al cargar plano:', error);  
-    setMensaje({ tipo: 'error', texto: 'Error al cargar el plano' });  
-  }  
-};
+      const res = await fetch(`${API}/api/areas/piso`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ idArea, idPiso: pisoSeleccionado.IDPiso }),
+      });
+
+      if (res.ok) {
+        setMensaje({ tipo: "success", texto: "✓ Área asignada exitosamente" });
+        cargarAreasPiso(pisoSeleccionado.IDPiso);
+      } else if (res.status === 401) {
+        setMensaje({
+          tipo: "error",
+          texto: "✗ No autorizado. Inicia sesión nuevamente",
+        });
+      } else {
+        setMensaje({ tipo: "error", texto: "✗ Error al asignar área" });
+      }
+    } catch (error) {
+      setMensaje({ tipo: "error", texto: "✗ Error al asignar área" });
+    }
+  };
+
+  const handleGuardarDelimitacion = async (idAreaPiso) => {
+    if (!rectangulo) {
+      setMensaje({
+        tipo: "error",
+        texto: "✗ Debes dibujar un rectángulo primero",
+      });
+      return;
+    }
+
+    const r =
+      rectangulo.x !== undefined ? rectangulo : normalizarRect(rectangulo);
+
+    try {
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(
+        `${API}/api/areas/piso/${idAreaPiso}/delimitacion`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            coordX: Math.round(r.x),
+            coordY: Math.round(r.y),
+            ancho: Math.round(r.width),
+            alto: Math.round(r.height),
+          }),
+        },
+      );
+
+      if (res.ok) {
+        setMensaje({
+          tipo: "success",
+          texto: "✓ Delimitación guardada exitosamente",
+        });
+        await cargarAreasPiso(pisoSeleccionado.IDPiso);
+        setModoDelimitacion(false);
+        setAreaPisoSeleccionada(null);
+        setAreaSeleccionada(null);
+
+        setPlanoVisible(false);
+        setRectangulo(null);
+      } else {
+        setMensaje({ tipo: "error", texto: "✗ Error al guardar delimitación" });
+      }
+    } catch (e) {
+      setMensaje({ tipo: "error", texto: "✗ Error al guardar delimitación" });
+    }
+  };
+
+  const handleEliminarArea = async (idAreaPiso) => {
+    if (!confirm("¿Estás seguro de eliminar esta área del piso?")) return;
+
+    try {
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(`${API}/api/areas/piso/${idAreaPiso}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (res.ok) {
+        setMensaje({ tipo: "success", texto: "✓ Área eliminada exitosamente" });
+        cargarAreasPiso(pisoSeleccionado.IDPiso);
+      } else if (res.status === 401) {
+        setMensaje({
+          tipo: "error",
+          texto: "✗ No autorizado. Inicia sesión nuevamente",
+        });
+      } else {
+        setMensaje({ tipo: "error", texto: "✗ Error al eliminar área" });
+      }
+    } catch (error) {
+      setMensaje({ tipo: "error", texto: "✗ Error al eliminar área" });
+    }
+  };
+
+  const cargarPlano = async (idPiso) => {
+    try {
+      const res = await fetch(`${API}/api/pisos/plano/${idPiso}`);
+      const data = await res.json();
+
+      if (data.success) {
+        setPlanoUrl(`${API}${data.ruta}`);
+        setPlanoVisible(true);
+      } else {
+        setMensaje({
+          tipo: "error",
+          texto: "No hay plano disponible para este piso",
+        });
+      }
+    } catch (error) {
+      console.error("Error al cargar plano:", error);
+      setMensaje({ tipo: "error", texto: "Error al cargar el plano" });
+    }
+  };
 
   const handleMouseDown = (e) => {
     if (!canvasRef.current) return;
@@ -186,6 +262,9 @@ const cargarPlano = async (idPiso) => {
 
   const handleMouseUp = () => {
     setDibujando(false);
+    setRectangulo((prev) =>
+      prev ? { ...prev, ...normalizarRect(prev) } : null,
+    );
   };
 
   const dibujarRectangulo = () => {
@@ -193,18 +272,16 @@ const cargarPlano = async (idPiso) => {
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
-
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const width = rectangulo.endX - rectangulo.startX;
-    const height = rectangulo.endY - rectangulo.startY;
+    const r =
+      rectangulo.x !== undefined ? rectangulo : normalizarRect(rectangulo);
 
     ctx.strokeStyle = "#3B82F6";
     ctx.lineWidth = 3;
     ctx.fillStyle = "rgba(59, 130, 246, 0.2)";
-
-    ctx.fillRect(rectangulo.startX, rectangulo.startY, width, height);
-    ctx.strokeRect(rectangulo.startX, rectangulo.startY, width, height);
+    ctx.fillRect(r.x, r.y, r.width, r.height);
+    ctx.strokeRect(r.x, r.y, r.width, r.height);
   };
 
   useEffect(() => {
@@ -212,6 +289,59 @@ const cargarPlano = async (idPiso) => {
       dibujarRectangulo();
     }
   }, [rectangulo, dibujando]);
+
+  const dibujarAreasExistentes = () => {
+    if (!canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const colors = [
+      { stroke: "#3B82F6", fill: "rgba(59, 130, 246, 0.15)" },
+      { stroke: "#10B981", fill: "rgba(16, 185, 129, 0.15)" },
+      { stroke: "#F59E0B", fill: "rgba(245, 158, 11, 0.15)" },
+      { stroke: "#EF4444", fill: "rgba(239, 68, 68, 0.15)" },
+      { stroke: "#8B5CF6", fill: "rgba(139, 92, 246, 0.15)" },
+      { stroke: "#EC4899", fill: "rgba(236, 72, 153, 0.15)" },
+    ];
+
+    areasPiso.forEach((areaPiso, index) => {
+      const area = areas.find((a) => a.IdArea === areaPiso.IdArea);
+      const tieneCaja =
+        areaPiso.PosicionX != null &&
+        areaPiso.PosicionY != null &&
+        Number(areaPiso.Ancho) > 0 &&
+        Number(areaPiso.Alto) > 0;
+
+      if (tieneCaja) {
+        const color = colors[index % colors.length];
+
+        ctx.strokeStyle = color.stroke;
+        ctx.lineWidth = 3;
+        ctx.fillStyle = color.fill;
+
+        ctx.fillRect(
+          Number(areaPiso.PosicionX),
+          Number(areaPiso.PosicionY),
+          Number(areaPiso.Ancho),
+          Number(areaPiso.Alto),
+        );
+        ctx.strokeRect(
+          Number(areaPiso.PosicionX),
+          Number(areaPiso.PosicionY),
+          Number(areaPiso.Ancho),
+          Number(areaPiso.Alto),
+        );
+
+        ctx.fillText(
+          area?.NombreArea || `Área ${areaPiso.IdArea}`,
+          Number(areaPiso.PosicionX) + 5,
+          Number(areaPiso.PosicionY) + 20,
+        );
+      }
+    });
+  };
 
   // Agrupar pisos por bodega
   const pisosPorBodega = pisos.reduce((acc, piso) => {
@@ -368,9 +498,23 @@ const cargarPlano = async (idPiso) => {
 
                 {/* Áreas asignadas */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                  <h4 className="text-lg font-semibold text-gray-900 mb-4">
-                    Áreas asignadas ({areasPiso.length})
-                  </h4>
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-lg font-semibold text-gray-900">
+                      Áreas asignadas ({areasPiso.length})
+                    </h4>
+                    {areasPiso.length > 0 && (
+                      <button
+                        onClick={async () => {
+                          await cargarPlano(pisoSeleccionado.IDPiso);
+                          setVistaMapaCompleto(true);
+                        }}
+                        className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm transition flex items-center gap-2"
+                      >
+                        <span>🗺️</span>
+                        Ver mapa completo
+                      </button>
+                    )}
+                  </div>
 
                   {loadingAreas ? (
                     <div className="text-center py-8">
@@ -387,12 +531,23 @@ const cargarPlano = async (idPiso) => {
                         const area = areas.find(
                           (a) => a.IdArea === areaPiso.IdArea,
                         );
+                        const tieneDelimitacion =
+                          areaPiso.TieneDelimitacion === 1 ||
+                          areaPiso.TieneDelimitacion === true ||
+                          (Number(areaPiso.Ancho) > 0 &&
+                            Number(areaPiso.Alto) > 0);
                         return (
                           <motion.div
                             key={areaPiso.IdAreaPiso}
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-gray-300 transition"
+                            onClick={() => {
+                              setAreaSeleccionada(area?.IdArea);
+                              setAreaPisoSeleccionada(areaPiso.IdAreaPiso);
+                              setModoDelimitacion(true);
+                              cargarPlano(pisoSeleccionado.IDPiso);
+                            }}
+                            className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-blue-300 transition cursor-pointer"
                           >
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -400,16 +555,30 @@ const cargarPlano = async (idPiso) => {
                                   {area?.IdArea}
                                 </span>
                               </div>
-                              <span className="font-medium text-gray-900">
-                                {area?.NombreArea || "Área desconocida"}
-                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-medium text-gray-900">
+                                  {area?.NombreArea || "Área desconocida"}
+                                </span>
+                                {tieneDelimitacion ? (
+                                  <span className="text-xs text-green-600 flex items-center gap-1">
+                                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                                    Delimitada en mapa
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-orange-600 flex items-center gap-1">
+                                    <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
+                                    Sin delimitar en mapa
+                                  </span>
+                                )}
+                              </div>
                             </div>
                             <motion.button
                               whileHover={{ scale: 1.05 }}
                               whileTap={{ scale: 0.95 }}
-                              onClick={() =>
-                                handleEliminarArea(areaPiso.IdAreaPiso)
-                              }
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEliminarArea(areaPiso.IdAreaPiso);
+                              }}
                               className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm transition"
                             >
                               ✕ Eliminar
@@ -443,7 +612,7 @@ const cargarPlano = async (idPiso) => {
                     disponibles)
                   </h4>
 
-                  {areasDisponiblesFiltradas.length === 0 ? (  
+                  {areasDisponiblesFiltradas.length === 0 ? (
                     <div className="text-center py-8 text-gray-500">
                       <span className="text-4xl mb-2 block">✅</span>
                       Todas las áreas ya están asignadas a este piso
@@ -457,6 +626,8 @@ const cargarPlano = async (idPiso) => {
                           whileTap={{ scale: 0.98 }}
                           onClick={() => {
                             setAreaSeleccionada(area.IdArea);
+                            setAreaPisoSeleccionada(null);
+                            setModoDelimitacion(false);
                             cargarPlano(pisoSeleccionado.IDPiso);
                           }}
                           className="p-4 text-left border-2 border-gray-300 rounded-lg hover:bg-blue-50 hover:border-blue-500 transition group"
@@ -482,7 +653,7 @@ const cargarPlano = async (idPiso) => {
         </div>
       </main>
 
-             {/* Modal de Plano con Canvas */}
+      {/* Modal de Plano con Canvas */}
       {planoVisible && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-auto">
@@ -492,24 +663,42 @@ const cargarPlano = async (idPiso) => {
               </h3>
               <button
                 onClick={() => {
-                  setPlanoVisible(false);
-                  setRectangulo(null);
-                  // opcional: limpiar canvas al cerrar
-                  if (canvasRef.current) {
-                    const ctx = canvasRef.current.getContext("2d");
-                    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+                  if (modoDelimitacion) {
+                    // Modo delimitar: guardar delimitación de área existente
+                    handleGuardarDelimitacion(areaPisoSeleccionada);
+                  } else {
+                    // Modo asignar: crear nueva asignación
+                    if (areaSeleccionada) {
+                      const area = areas.find(
+                        (a) => a.IdArea === areaSeleccionada,
+                      );
+                      handleAsignarArea(areaSeleccionada, area?.NombreArea);
+                      setPlanoVisible(false);
+                      setRectangulo(null);
+                      if (canvasRef.current) {
+                        const ctx = canvasRef.current.getContext("2d");
+                        ctx.clearRect(
+                          0,
+                          0,
+                          canvasRef.current.width,
+                          canvasRef.current.height,
+                        );
+                      }
+                    }
                   }
                 }}
-                className="text-gray-500 hover:text-gray-700 text-2xl"
+                disabled={!rectangulo}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
               >
-                ✕
+                {modoDelimitacion ? "Guardar Delimitación" : "Asignar Área"}
               </button>
             </div>
 
             <div className="p-6">
               <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm text-blue-800">
-                  💡 Haz clic y arrastra sobre el plano para dibujar un rectángulo que delimite el área
+                  💡 Haz clic y arrastra sobre el plano para dibujar un
+                  rectángulo que delimite el área
                 </p>
               </div>
 
@@ -523,6 +712,7 @@ const cargarPlano = async (idPiso) => {
                     if (canvasRef.current) {
                       canvasRef.current.width = e.target.width;
                       canvasRef.current.height = e.target.height;
+                      dibujarAreasExistentes(); // ✅ mostrar lo ya guardado
                     }
                   }}
                 />
@@ -536,36 +726,153 @@ const cargarPlano = async (idPiso) => {
               </div>
 
               <div className="mt-4 flex gap-3">
-                <button
-                  onClick={() => {
-                    if (areaSeleccionada) {
-                      handleAsignarArea(areaSeleccionada);
-                      setPlanoVisible(false);
-                      setRectangulo(null);
-                      if (canvasRef.current) {
-                        const ctx = canvasRef.current.getContext("2d");
-                        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-                      }
+                {modoDelimitacion ? (
+                  <button
+                    onClick={() =>
+                      handleGuardarDelimitacion(areaPisoSeleccionada)
                     }
-                  }}
-                  disabled={!rectangulo}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                >
-                  Asignar Área
-                </button>
+                    disabled={!rectangulo}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  >
+                    Guardar Delimitación
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      if (areaSeleccionada) {
+                        const area = areas.find(
+                          (a) => a.IdArea === areaSeleccionada,
+                        );
+                        handleAsignarArea(areaSeleccionada, area?.NombreArea);
+                        setPlanoVisible(false);
+                        setRectangulo(null);
+                        if (canvasRef.current) {
+                          const ctx = canvasRef.current.getContext("2d");
+                          ctx.clearRect(
+                            0,
+                            0,
+                            canvasRef.current.width,
+                            canvasRef.current.height,
+                          );
+                        }
+                      }
+                    }}
+                    disabled={!rectangulo}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  >
+                    Asignar Área
+                  </button>
+                )}
 
                 <button
                   onClick={() => {
                     setRectangulo(null);
                     if (canvasRef.current) {
                       const ctx = canvasRef.current.getContext("2d");
-                      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+                      ctx.clearRect(
+                        0,
+                        0,
+                        canvasRef.current.width,
+                        canvasRef.current.height,
+                      );
                     }
                   }}
                   className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
                 >
                   Limpiar
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal de Vista Previa del Mapa Completo */}
+      {vistaMapaCompleto && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-auto">
+            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+              <h3 className="text-xl font-bold text-gray-900">
+                Mapa Completo - Piso {pisoSeleccionado?.NumeroPiso}
+              </h3>
+              <button
+                onClick={() => setVistaMapaCompleto(false)}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  🗺️ Vista previa de todas las áreas delimitadas en este piso
+                </p>
+              </div>
+
+              <div className="relative inline-block">
+                <img
+                  ref={imagenRef}
+                  src={planoUrl}
+                  alt="Plano del piso"
+                  className="max-w-full h-auto border border-gray-300 rounded"
+                  onLoad={(e) => {
+                    if (canvasRef.current) {
+                      canvasRef.current.width = e.target.width;
+                      canvasRef.current.height = e.target.height;
+                      dibujarAreasExistentes(); // 👈 para ver lo ya guardado
+                    }
+                  }}
+                />
+                <canvas
+                  ref={canvasRef}
+                  className="absolute top-0 left-0 pointer-events-none"
+                />
+              </div>
+
+              {/* Leyenda de colores */}
+              <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                <h4 className="text-sm font-semibold text-gray-900 mb-3">
+                  Áreas delimitadas:
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {areasPiso
+                    .filter(
+                      (ap) =>
+                        ap.PosicionX != null &&
+                        ap.PosicionY != null &&
+                        Number(ap.Ancho) > 0 &&
+                        Number(ap.Alto) > 0,
+                    )
+                    .map((areaPiso, index) => {
+                      const area = areas.find(
+                        (a) => a.IdArea === areaPiso.IdArea,
+                      );
+                      const colors = [
+                        "#3B82F6",
+                        "#10B981",
+                        "#F59E0B",
+                        "#EF4444",
+                        "#8B5CF6",
+                        "#EC4899",
+                      ];
+                      const color = colors[index % colors.length];
+
+                      return (
+                        <div
+                          key={areaPiso.IdAreaPiso}
+                          className="flex items-center gap-2"
+                        >
+                          <div
+                            className="w-4 h-4 rounded"
+                            style={{ backgroundColor: color }}
+                          ></div>
+                          <span className="text-sm text-gray-700">
+                            {area?.NombreArea || `Área ${areaPiso.IdArea}`}
+                          </span>
+                        </div>
+                      );
+                    })}
+                </div>
               </div>
             </div>
           </div>

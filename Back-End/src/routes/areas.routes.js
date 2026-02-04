@@ -187,5 +187,26 @@ router.delete("/piso/:idAreaPiso", authenticateToken, async (req, res) => {
     });    
   }    
 });
+
+// PUT - Guardar delimitación de área existente  
+router.put("/piso/:idAreaPiso/delimitacion", authenticateToken, async (req, res) => {  
+  const { idAreaPiso } = req.params;  
+  const { coordX, coordY, ancho, alto } = req.body;  
+  const usuario = req.user.email;  
+    
+  logAuditoria('GUARDAR_DELIMITACION', usuario, { idAreaPiso, coordX, coordY, ancho, alto });  
+
+  try {  
+    var Rta = await GetData(`EditABCDeskBooking=2,${idAreaPiso},${coordX},${coordY},${ancho},${alto}`);  
+    var S = Rta.trim();  
+    var D = JSON.parse(S.trim());  
+      
+    logAuditoria('GUARDAR_DELIMITACION', usuario, { idAreaPiso, resultado: 'success' });  
+    return res.json(D);  
+  } catch(error) {  
+    logAuditoria('GUARDAR_DELIMITACION', usuario, { idAreaPiso, resultado: 'error', error: error.message });  
+    return res.status(500).json({ message: error });  
+  }  
+});
   
 export default router;
