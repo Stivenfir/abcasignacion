@@ -21,6 +21,8 @@ export default function Areas() {
   const imagenRef = useRef(null);
   const [vistaMapaCompleto, setVistaMapaCompleto] = useState(false);
   const [modoDelimitacion, setModoDelimitacion] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [rectanguloAnterior, setRectanguloAnterior] = useState(null);
   const [areaPisoSeleccionada, setAreaPisoSeleccionada] = useState(null);
   const normalizarRect = (r) => {
     const x = Math.min(r.startX, r.endX);
@@ -220,16 +222,18 @@ export default function Areas() {
 
       if (data.success) {
         setPlanoUrl(`${API}${data.ruta}`);
-        setPlanoVisible(true);
+        return true;
       } else {
         setMensaje({
           tipo: "error",
           texto: "No hay plano disponible para este piso",
         });
+        return false;
       }
     } catch (error) {
       console.error("Error al cargar plano:", error);
       setMensaje({ tipo: "error", texto: "Error al cargar el plano" });
+      return false;
     }
   };
 
@@ -262,9 +266,21 @@ export default function Areas() {
 
   const handleMouseUp = () => {
     setDibujando(false);
-    setRectangulo((prev) =>
-      prev ? { ...prev, ...normalizarRect(prev) } : null,
-    );
+    const normalized = rectangulo ? normalizarRect(rectangulo) : null;
+
+    if (normalized && (normalized.width < 20 || normalized.height < 20)) {
+      setMensaje({
+        tipo: "error",
+        texto: "El área debe ser más grande (mínimo 20x20 px)",
+      });
+      setRectangulo(null);
+      return;
+    }
+
+    if (rectangulo) {
+      setRectanguloAnterior(rectangulo); // ✅ Guardar ANTES de actualizar
+      setRectangulo(normalized);
+    }
   };
 
   const dibujarRectangulo = () => {
@@ -289,6 +305,27 @@ export default function Areas() {
       dibujarRectangulo();
     }
   }, [rectangulo, dibujando]);
+
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === "Escape" && planoVisible) {
+        const confirmar = rectangulo
+          ? confirm("¿Descartar los cambios?")
+          : true;
+
+        if (confirmar) {
+          setPlanoVisible(false);
+          setRectangulo(null);
+          setModoDelimitacion(false);
+          setAreaSeleccionada(null);
+          setAreaPisoSeleccionada(null);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, [planoVisible, rectangulo]);
 
   const dibujarAreasExistentes = () => {
     if (!canvasRef.current) return;
@@ -505,8 +542,18 @@ export default function Areas() {
                     {areasPiso.length > 0 && (
                       <button
                         onClick={async () => {
-                          await cargarPlano(pisoSeleccionado.IDPiso);
-                          setVistaMapaCompleto(true);
+                          // 1) aseguro que NO quede el modal de edición debajo
+                          setPlanoVisible(false);
+
+                          // 2) limpio cosas de edición (opcional pero recomendado)
+                          setRectangulo(null);
+                          setModoDelimitacion(false);
+                          setAreaSeleccionada(null);
+                          setAreaPisoSeleccionada(null);
+
+                          // 3) cargo plano y solo si ok abro el mapa completo
+                          const ok = await cargarPlano(pisoSeleccionado.IDPiso);
+                          if (ok) setVistaMapaCompleto(true);
                         }}
                         className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm transition flex items-center gap-2"
                       >
@@ -542,10 +589,35 @@ export default function Areas() {
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             onClick={() => {
+                              const area = areas.find(
+                                (a) => a.IdArea === areaPiso.IdArea,
+                              );
                               setAreaSeleccionada(area?.IdArea);
                               setAreaPisoSeleccionada(areaPiso.IdAreaPiso);
                               setModoDelimitacion(true);
-                              cargarPlano(pisoSeleccionado.IDPiso);
+
+                              // Cargar rectángulo existente si tiene delimitación
+                              if (
+                                areaPiso.PosicionX != null &&
+                                Number(areaPiso.Ancho) > 0
+                              ) {
+                                setRectangulo({
+                                  x: Number(areaPiso.PosicionX),
+                                  y: Number(areaPiso.PosicionY),
+                                  width: Number(areaPiso.Ancho),
+                                  height: Number(areaPiso.Alto),
+                                });
+                              }
+
+                              (async () => {
+                                // para que NO quede el mapa completo debajo
+                                setVistaMapaCompleto(false);
+
+                                const ok = await cargarPlano(
+                                  pisoSeleccionado.IDPiso,
+                                );
+                                if (ok) setPlanoVisible(true);
+                              })();
                             }}
                             className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-blue-300 transition cursor-pointer"
                           >
@@ -628,7 +700,13 @@ export default function Areas() {
                             setAreaSeleccionada(area.IdArea);
                             setAreaPisoSeleccionada(null);
                             setModoDelimitacion(false);
-                            cargarPlano(pisoSeleccionado.IDPiso);
+
+                            (async () => {
+                              const ok = await cargarPlano(
+                                pisoSeleccionado.IDPiso,
+                              );
+                              if (ok) setPlanoVisible(true);
+                            })();
                           }}
                           className="p-4 text-left border-2 border-gray-300 rounded-lg hover:bg-blue-50 hover:border-blue-500 transition group"
                         >
@@ -655,7 +733,24 @@ export default function Areas() {
 
       {/* Modal de Plano con Canvas */}
       {planoVisible && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              const confirmar = rectangulo
+                ? confirm("¿Descartar los cambios?")
+                : true;
+
+              if (confirmar) {
+                setPlanoVisible(false);
+                setRectangulo(null);
+                setModoDelimitacion(false);
+                setAreaSeleccionada(null);
+                setAreaPisoSeleccionada(null);
+              }
+            }
+          }}
+        >
           <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-auto">
             <div className="p-6 border-b border-gray-200 flex justify-between items-center">
               <h3 className="text-xl font-bold text-gray-900">
@@ -663,34 +758,15 @@ export default function Areas() {
               </h3>
               <button
                 onClick={() => {
-                  if (modoDelimitacion) {
-                    // Modo delimitar: guardar delimitación de área existente
-                    handleGuardarDelimitacion(areaPisoSeleccionada);
-                  } else {
-                    // Modo asignar: crear nueva asignación
-                    if (areaSeleccionada) {
-                      const area = areas.find(
-                        (a) => a.IdArea === areaSeleccionada,
-                      );
-                      handleAsignarArea(areaSeleccionada, area?.NombreArea);
-                      setPlanoVisible(false);
-                      setRectangulo(null);
-                      if (canvasRef.current) {
-                        const ctx = canvasRef.current.getContext("2d");
-                        ctx.clearRect(
-                          0,
-                          0,
-                          canvasRef.current.width,
-                          canvasRef.current.height,
-                        );
-                      }
-                    }
-                  }
+                  setPlanoVisible(false);
+                  setRectangulo(null);
+                  setModoDelimitacion(false);
+                  setAreaSeleccionada(null);
+                  setAreaPisoSeleccionada(null);
                 }}
-                disabled={!rectangulo}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                className="text-gray-500 hover:text-gray-700 text-2xl"
               >
-                {modoDelimitacion ? "Guardar Delimitación" : "Asignar Área"}
+                ✕
               </button>
             </div>
 
@@ -700,6 +776,13 @@ export default function Areas() {
                   💡 Haz clic y arrastra sobre el plano para dibujar un
                   rectángulo que delimite el área
                 </p>
+                {rectangulo && (
+                  <p className="text-sm text-gray-700 mt-2">
+                    📐 Dimensiones:{" "}
+                    {Math.round(normalizarRect(rectangulo).width)} ×{" "}
+                    {Math.round(normalizarRect(rectangulo).height)} px
+                  </p>
+                )}
               </div>
 
               <div className="relative inline-block">
@@ -768,13 +851,7 @@ export default function Areas() {
                   onClick={() => {
                     setRectangulo(null);
                     if (canvasRef.current) {
-                      const ctx = canvasRef.current.getContext("2d");
-                      ctx.clearRect(
-                        0,
-                        0,
-                        canvasRef.current.width,
-                        canvasRef.current.height,
-                      );
+                      dibujarAreasExistentes(); // ✅ Esto ya limpia y redibuja
                     }
                   }}
                   className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
@@ -795,7 +872,14 @@ export default function Areas() {
                 Mapa Completo - Piso {pisoSeleccionado?.NumeroPiso}
               </h3>
               <button
-                onClick={() => setVistaMapaCompleto(false)}
+                onClick={() => {
+                  setVistaMapaCompleto(false);
+                  setPlanoVisible(false); // por si acaso quedó abierto debajo
+                  setRectangulo(null);
+                  setModoDelimitacion(false);
+                  setAreaSeleccionada(null);
+                  setAreaPisoSeleccionada(null);
+                }}
                 className="text-gray-500 hover:text-gray-700 text-2xl"
               >
                 ✕
