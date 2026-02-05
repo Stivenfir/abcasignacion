@@ -138,6 +138,81 @@ export function useAreas() {
       }  
     }  
   };  
+
+  const editarDelimitacion = async (idAreaPiso, idDelimitacion, rectangulo) => {  
+  try {  
+    const token = localStorage.getItem("token");  
+    const res = await fetch(`${API}/api/areas/piso/${idAreaPiso}/delimitacion/${idDelimitacion}`, {  
+      method: "PUT",  
+      headers: {  
+        "Content-Type": "application/json",  
+        Authorization: `Bearer ${token}`,  
+      },  
+      body: JSON.stringify({  
+        coordX: Math.round(rectangulo.x),  
+        coordY: Math.round(rectangulo.y),  
+        ancho: Math.round(rectangulo.width),  
+        alto: Math.round(rectangulo.height)  
+      }),  
+    });  
+  
+    await handleAPIResponse(res, `PUT /api/areas/piso/${idAreaPiso}/delimitacion/${idDelimitacion}`);  
+      
+    setMensaje({ tipo: 'success', texto: '✓ Delimitación editada exitosamente' });  
+      
+    // Recargar delimitaciones  
+    const dels = await cargarDelimitaciones(idAreaPiso);  
+    setDelimitaciones(prev => ({  
+      ...prev,  
+      [idAreaPiso]: dels  
+    }));  
+      
+    return true;  
+  } catch (error) {  
+    if (error instanceof APIError) {  
+      setMensaje({ tipo: 'error', texto: `✗ ${error.message}` });  
+    } else {  
+      logError(error, { action: 'editarDelimitacion', idAreaPiso, idDelimitacion });  
+      setMensaje({ tipo: 'error', texto: '✗ Error al editar delimitación' });  
+    }  
+    return false;  
+  }  
+}; 
+
+const eliminarDelimitacion = async (idAreaPiso, idDelimitacion) => {  
+  if (!confirm("¿Estás seguro de eliminar esta delimitación?")) return;  
+  
+  try {  
+    const token = localStorage.getItem("token");  
+    const res = await fetch(`${API}/api/areas/piso/${idAreaPiso}/delimitacion/${idDelimitacion}`, {  
+      method: "DELETE",  
+      headers: {  
+        Authorization: `Bearer ${token}`,  
+      },  
+    });  
+  
+    await handleAPIResponse(res, `DELETE /api/areas/piso/${idAreaPiso}/delimitacion/${idDelimitacion}`);  
+      
+    setMensaje({ tipo: "success", texto: "✓ Delimitación eliminada exitosamente" });  
+      
+    // Recargar delimitaciones  
+    const dels = await cargarDelimitaciones(idAreaPiso);  
+    setDelimitaciones(prev => ({  
+      ...prev,  
+      [idAreaPiso]: dels  
+    }));  
+      
+    return true;  
+  } catch (error) {  
+    if (error instanceof APIError) {  
+      setMensaje({ tipo: 'error', texto: `✗ ${error.message}` });  
+    } else {  
+      logError(error, { action: 'eliminarDelimitacion', idAreaPiso, idDelimitacion });  
+      setMensaje({ tipo: "error", texto: "✗ Error al eliminar delimitación" });  
+    }  
+    return false;  
+  }  
+};  
     
   const crearDelimitacion = async (idAreaPiso, rectangulo) => {  
     try {  
@@ -204,6 +279,36 @@ export function useAreas() {
       }  
     }  
   };  
+
+  const editarDelimitacionDirecta = async (idAreaPiso, idDelimitacion, coordX, coordY, ancho, alto) => {  
+  try {  
+    const token = localStorage.getItem("token");  
+    const res = await fetch(`${API}/api/areas/piso/${idAreaPiso}/delimitacion/${idDelimitacion}`, {  
+      method: "PUT",  
+      headers: {  
+        "Content-Type": "application/json",  
+        Authorization: `Bearer ${token}`,  
+      },  
+      body: JSON.stringify({ coordX, coordY, ancho, alto }),  
+    });  
+  
+    await handleAPIResponse(res, `PUT /api/areas/piso/${idAreaPiso}/delimitacion/${idDelimitacion}`);  
+    setMensaje({ tipo: 'success', texto: '✓ Delimitación editada exitosamente' });  
+      
+    const dels = await cargarDelimitaciones(idAreaPiso);  
+    setDelimitaciones(prev => ({ ...prev, [idAreaPiso]: dels }));  
+      
+    return true;  
+  } catch (error) {  
+    if (error instanceof APIError) {  
+      setMensaje({ tipo: 'error', texto: `✗ ${error.message}` });  
+    } else {  
+      logError(error, { action: 'editarDelimitacionDirecta', idAreaPiso, idDelimitacion });  
+      setMensaje({ tipo: 'error', texto: '✗ Error al editar delimitación' });  
+    }  
+    return false;  
+  }  
+};  
     
   return {  
     // Estados  
@@ -225,6 +330,9 @@ export function useAreas() {
     cargarDelimitaciones,  
     handleAsignarArea,  
     handleEliminarArea,  
-    crearDelimitacion  
+    crearDelimitacion, 
+      editarDelimitacion,  
+  eliminarDelimitacion , 
+   editarDelimitacionDirecta 
   };  
 }

@@ -277,6 +277,76 @@ router.get("/piso/:idAreaPiso/delimitaciones", async (req, res) => {
 });
 
 
+// PUT - Editar una delimitación específica  
+router.put("/piso/:idAreaPiso/delimitacion/:idDelimitacion", authenticateToken, async (req, res) => {  
+  const { idAreaPiso, idDelimitacion } = req.params;  
+  const { coordX, coordY, ancho, alto } = req.body;  
+  const usuario = req.user.email;  
+    
+  // Validar parámetros  
+  if (!coordX || !coordY || !ancho || !alto) {  
+    return res.status(400).json({ error: "Todos los parámetros son requeridos" });  
+  }  
+    
+  logAuditoria('EDITAR_DELIMITACION', usuario, { idAreaPiso, idDelimitacion, coordX, coordY, ancho, alto });  
+    
+  try {  
+    var Rta = await GetData(`EditABCDeskBooking=4,${idDelimitacion},${coordX},${coordY},${ancho},${alto}`);  
+      
+    if (!Rta || Rta.trim().startsWith(':')) {  
+      logAuditoria('EDITAR_DELIMITACION', usuario, {   
+        idDelimitacion,   
+        resultado: 'error',  
+        error: 'Servicio de base de datos no disponible'  
+      });  
+      return res.status(503).json({   
+        message: "Servicio de base de datos no disponible"   
+      });  
+    }  
+      
+    var S = Rta.trim();  
+    var D = JSON.parse(S.trim());  
+      
+    logAuditoria('EDITAR_DELIMITACION', usuario, { idDelimitacion, resultado: 'success' });  
+    return res.json(D);  
+  } catch(error) {  
+    logAuditoria('EDITAR_DELIMITACION', usuario, { idDelimitacion, resultado: 'error', error: error.message });  
+    return res.status(500).json({ message: error.message });  
+  }  
+});  
+  
+// DELETE - Eliminar una delimitación específica  
+router.delete("/piso/:idAreaPiso/delimitacion/:idDelimitacion", authenticateToken, async (req, res) => {  
+  const { idAreaPiso, idDelimitacion } = req.params;  
+  const usuario = req.user.email;  
+    
+  logAuditoria('ELIMINAR_DELIMITACION', usuario, { idAreaPiso, idDelimitacion });  
+    
+  try {  
+    var Rta = await GetData(`EditABCDeskBooking=5,${idDelimitacion},0,0,0,0`);  
+      
+    if (!Rta || Rta.trim().startsWith(':')) {  
+      logAuditoria('ELIMINAR_DELIMITACION', usuario, {   
+        idDelimitacion,   
+        resultado: 'error',  
+        error: 'Servicio de base de datos no disponible'  
+      });  
+      return res.status(503).json({   
+        message: "Servicio de base de datos no disponible"   
+      });  
+    }  
+      
+    var S = Rta.trim();  
+    var D = JSON.parse(S.trim());  
+      
+    logAuditoria('ELIMINAR_DELIMITACION', usuario, { idDelimitacion, resultado: 'success' });  
+    return res.json(D);  
+  } catch(error) {  
+    logAuditoria('ELIMINAR_DELIMITACION', usuario, { idDelimitacion, resultado: 'error', error: error.message });  
+    return res.status(500).json({ message: error.message });  
+  }  
+});
+
 
   
 export default router;
