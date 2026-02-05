@@ -208,5 +208,50 @@ router.put("/piso/:idAreaPiso/delimitacion", authenticateToken, async (req, res)
     return res.status(500).json({ message: error });  
   }  
 });
+
+//POST - CREAR nueva delimitacion (que permita multiple areas)
+
+router.post("/piso/:idAreaPiso/delimitacion", authenticateToken, async (req, res) => {    
+  const { idAreaPiso } = req.params;    
+  const { coordX, coordY, ancho, alto } = req.body;    
+  const usuario = req.user.email;    
+      
+  // Validar parámetros    
+  if (!coordX || !coordY || !ancho || !alto) {    
+    return res.status(400).json({ error: "Todos los parámetros son requeridos" });    
+  }    
+      
+  logAuditoria('CREAR_DELIMITACION', usuario, { idAreaPiso, coordX, coordY, ancho, alto });    
+    
+  try {    
+
+    var Rta = await GetData(`EditABCDeskBooking=3,${idAreaPiso},${coordX},${coordY},${ancho},${alto}`);    
+      
+    if (!Rta || Rta.trim().startsWith(':')) {  
+      logAuditoria('CREAR_DELIMITACION', usuario, {   
+        idAreaPiso,   
+        resultado: 'error',  
+        error: 'Servicio de base de datos no disponible'  
+      });  
+      return res.status(503).json({   
+        message: "Servicio de base de datos no disponible"   
+      });  
+    }  
+      
+    var S = Rta.trim();    
+    var D = JSON.parse(S.trim());    
+        
+    logAuditoria('CREAR_DELIMITACION', usuario, { idAreaPiso, resultado: 'success' });    
+    return res.json(D);    
+  } catch(error) {    
+    logAuditoria('CREAR_DELIMITACION', usuario, { idAreaPiso, resultado: 'error', error: error.message });    
+    return res.status(500).json({ message: error.message });    
+  }    
+});
+
+
+
+
+
   
 export default router;
