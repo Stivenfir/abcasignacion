@@ -9,6 +9,8 @@ export default function GestionDelimitacionesModal({
   onClose,
 }) {
   const delims = delimitaciones[areaPiso.IdAreaPiso] || [];
+  console.log('🔍 Estructura de delimitaciones:', delims);  
+console.log('🔍 Primera delimitación:', delims[0]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">

@@ -2,13 +2,15 @@
 import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import { validarDelimitacion } from "../../utils/validacionDelimitaciones";
+import { COLORS } from "../../utils/canvas";
 
 export default function PlanoModal({
   pisoSeleccionado,
   areaSeleccionada,
   areaPisoSeleccionada,
-  modoDelimitacion,
+  modo,
   areas,
+  areasPiso, // ✅ NUEVA PROP
   delimitaciones,
   delimitacionAEditar,
   onClose,
@@ -21,7 +23,6 @@ export default function PlanoModal({
   const [rectangulo, setRectangulo] = useState(null);
   const canvasRef = useRef(null);
   const imagenRef = useRef(null);
-  const [idDelimitacionEditando, setIdDelimitacionEditando] = useState(null);
   const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
   // Cargar plano al montar
@@ -29,21 +30,20 @@ export default function PlanoModal({
     cargarPlano();
   }, [pisoSeleccionado]);
 
-  // Cargar delimitaciones existentes si está en modo edición
+  // ✅ ACTUALIZADO: Dibujar delimitaciones cuando cambia el modo o las delimitaciones
   useEffect(() => {
     if (
-      modoDelimitacion &&
+      (modo === "agregar" || modo === "editar") &&
       areaPisoSeleccionada &&
       delimitaciones[areaPisoSeleccionada]
     ) {
-      dibujarDelimitacionesExistentes();
+      dibujarTodasLasDelimitaciones();
     }
-  }, [modoDelimitacion, areaPisoSeleccionada, delimitaciones]);
+  }, [modo, areaPisoSeleccionada, delimitaciones, areasPiso]);
 
+  // Pre-cargar rectángulo si estamos editando
   useEffect(() => {
-    if (delimitacionAEditar) {
-      setIdDelimitacionEditando(delimitacionAEditar.IdDelimitacion);
-      // Pre-cargar el rectángulo con las coordenadas existentes
+    if (delimitacionAEditar && modo === "editar") {
       setRectangulo({
         x: Number(delimitacionAEditar.PosicionX),
         y: Number(delimitacionAEditar.PosicionY),
@@ -51,7 +51,7 @@ export default function PlanoModal({
         height: Number(delimitacionAEditar.Alto),
       });
     }
-  }, [delimitacionAEditar]);
+  }, [delimitacionAEditar, modo]);
 
   const cargarPlano = async () => {
     try {
@@ -94,22 +94,34 @@ export default function PlanoModal({
     }));
   };
 
-  // ✅ ACTUALIZADO: Validación completa al soltar el mouse
+  // ✅ ACTUALIZADO: Validar contra TODAS las delimitaciones del piso
   const handleMouseUp = () => {
     setDibujando(false);
     const normalized = rectangulo ? normalizarRect(rectangulo) : null;
 
     if (!normalized) return;
 
-    // Obtener delimitaciones existentes del área actual
-    const delimitacionesExistentes = modoDelimitacion
-      ? delimitaciones[areaPisoSeleccionada] || []
-      : [];
+    // ✅ Obtener TODAS las delimitaciones del piso
+    const todasLasDelimitaciones = [];
+    if (areasPiso) {
+      areasPiso.forEach((areaPiso) => {
+        const delims = delimitaciones[areaPiso.IdAreaPiso] || [];
+        todasLasDelimitaciones.push(...delims);
+      });
+    }
 
-    // Validación completa usando las funciones del archivo validacionDelimitaciones
+    // Filtrar la delimitación que se está editando
+    const delimsParaValidar =
+      modo === "editar" && delimitacionAEditar
+        ? todasLasDelimitaciones.filter(
+            (d) => d.IdDelimitacion !== delimitacionAEditar.IdDelimitacion,
+          )
+        : todasLasDelimitaciones;
+
+    // Validación completa
     const validacion = validarDelimitacion(
       normalized,
-      delimitacionesExistentes,
+      delimsParaValidar,
       canvasRef.current.width,
       canvasRef.current.height,
     );
@@ -117,44 +129,86 @@ export default function PlanoModal({
     if (!validacion.valido) {
       alert(validacion.mensaje);
       setRectangulo(null);
-      dibujarDelimitacionesExistentes();
+      redibujarDelimitaciones();
       return;
     }
 
     setRectangulo(normalized);
   };
 
-  const dibujarDelimitacionesExistentes = () => {
-    if (!canvasRef.current) return;
+  // ✅ NUEVA FUNCIÓN: Dibujar TODAS las áreas del piso con números
+  const dibujarTodasLasDelimitaciones = () => {
+    if (!canvasRef.current || !areasPiso) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const colors = [
-      { stroke: "#3B82F6", fill: "rgba(59, 130, 246, 0.15)" },
-      { stroke: "#10B981", fill: "rgba(16, 185, 129, 0.15)" },
-      { stroke: "#F59E0B", fill: "rgba(245, 158, 11, 0.15)" },
-      { stroke: "#EF4444", fill: "rgba(239, 68, 68, 0.15)" },
-      { stroke: "#8B5CF6", fill: "rgba(139, 92, 246, 0.15)" },
-      { stroke: "#EC4899", fill: "rgba(236, 72, 153, 0.15)" },
-    ];
+    // Dibujar todas las áreas del piso
+    areasPiso.forEach((areaPiso, areaIndex) => {
+      const area = areas.find((a) => a.IdArea === areaPiso.IdArea);
+      const delims = delimitaciones[areaPiso.IdAreaPiso] || [];
+      const color = COLORS[areaIndex % COLORS.length];
 
-    const delims = delimitaciones[areaPisoSeleccionada] || [];
-    if (delims.length === 0) return;
+      delims.forEach((delim, index) => {
+        // Si es el área actual, usar color normal; si no, más transparente
+        const esAreaActual = areaPiso.IdAreaPiso === areaPisoSeleccionada;
 
-    // ✅ Validar que exista IdArea
-    const idArea = delims[0]?.IdArea;
-    if (idArea === undefined) return;
+        // Si estamos editando esta delimitación específica, usar estilo diferente
+        const esDelimitacionEnEdicion =
+          modo === "editar" &&
+          delimitacionAEditar &&
+          delim.IdDelimitacion === delimitacionAEditar.IdDelimitacion;
 
-    const color = colors[idArea % colors.length];
+        if (esDelimitacionEnEdicion) {
+          ctx.strokeStyle = "#999";
+          ctx.lineWidth = 2;
+          ctx.setLineDash([5, 5]);
+          ctx.fillStyle = "rgba(200, 200, 200, 0.1)";
+        } else if (esAreaActual) {
+          ctx.strokeStyle = color.stroke;
+          ctx.lineWidth = 3;
+          ctx.setLineDash([]);
+          ctx.fillStyle = color.fill;
+        } else {
+          // Otras áreas: más transparentes
+          ctx.strokeStyle = color.stroke;
+          ctx.lineWidth = 2;
+          ctx.setLineDash([]);
+          ctx.fillStyle = color.fill.replace(/[\d.]+\)/, "0.05)"); // Más transparente
+        }
 
-    // Dibujar todas las delimitaciones con el mismo color
-    delims.forEach((delim) => {
-      ctx.strokeStyle = color.stroke;
-      ctx.lineWidth = 3;
-      ctx.fillStyle = color.fill;
-      ctx.fillRect(delim.PosicionX, delim.PosicionY, delim.Ancho, delim.Alto);
-      ctx.strokeRect(delim.PosicionX, delim.PosicionY, delim.Ancho, delim.Alto);
+        ctx.fillRect(delim.PosicionX, delim.PosicionY, delim.Ancho, delim.Alto);
+        ctx.strokeRect(
+          delim.PosicionX,
+          delim.PosicionY,
+          delim.Ancho,
+          delim.Alto,
+        );
+
+        // ✅ Agregar número centrado
+        ctx.setLineDash([]); // Reset dash para el texto
+        ctx.fillStyle = color.stroke;
+        ctx.font = "bold 16px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(
+          `#${index + 1}`,
+          delim.PosicionX + delim.Ancho / 2,
+          delim.PosicionY + delim.Alto / 2,
+        );
+
+        // Mostrar nombre del área si no es el área actual
+        if (!esAreaActual) {
+          ctx.font = "12px Arial";
+          ctx.textAlign = "left";
+          ctx.textBaseline = "top";
+          ctx.fillText(
+            area?.NombreArea || `Área ${areaPiso.IdArea}`,
+            delim.PosicionX + 5,
+            delim.PosicionY + 5,
+          );
+        }
+      });
     });
   };
 
@@ -163,17 +217,28 @@ export default function PlanoModal({
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
 
-    // Redibujar delimitaciones existentes primero
-    dibujarDelimitacionesExistentes();
+    // Redibujar todas las delimitaciones primero
+    redibujarDelimitaciones();
 
     // Dibujar rectángulo actual
     const r =
       rectangulo.x !== undefined ? rectangulo : normalizarRect(rectangulo);
     ctx.strokeStyle = "#3B82F6";
     ctx.lineWidth = 3;
+    ctx.setLineDash([]);
     ctx.fillStyle = "rgba(59, 130, 246, 0.2)";
     ctx.fillRect(r.x, r.y, r.width, r.height);
     ctx.strokeRect(r.x, r.y, r.width, r.height);
+  };
+
+  const redibujarDelimitaciones = () => {
+    if (
+      (modo === "agregar" || modo === "editar") &&
+      areaPisoSeleccionada &&
+      delimitaciones[areaPisoSeleccionada]
+    ) {
+      dibujarTodasLasDelimitaciones();
+    }
   };
 
   useEffect(() => {
@@ -187,18 +252,21 @@ export default function PlanoModal({
     const r =
       rectangulo.x !== undefined ? rectangulo : normalizarRect(rectangulo);
 
-    if (idDelimitacionEditando) {
-      // Modo edición
+    if (modo === "editar" && delimitacionAEditar) {
+      if (!delimitacionAEditar.IdDelimitacion) {
+        alert("Error: No se puede editar - ID de delimitación no encontrado");
+        console.error("delimitacionAEditar:", delimitacionAEditar);
+        return;
+      }
+
       await onEditarDelimitacion(
         areaPisoSeleccionada,
-        idDelimitacionEditando,
+        delimitacionAEditar.IdDelimitacion,
         r,
       );
-    } else if (modoDelimitacion) {
-      // Modo crear nueva delimitación
+    } else if (modo === "agregar") {
       await onCrearDelimitacion(areaPisoSeleccionada, r);
-    } else {
-      // Modo asignar área
+    } else if (modo === "crear") {
       const area = areas.find((a) => a.IdArea === areaSeleccionada);
       await onAsignarArea(areaSeleccionada, area?.NombreArea, r);
     }
@@ -222,9 +290,9 @@ export default function PlanoModal({
       >
         <div className="p-6 border-b border-gray-200 flex justify-between items-center">
           <h3 className="text-xl font-bold text-gray-900">
-            {idDelimitacionEditando
+            {modo === "editar"
               ? "Editar Delimitación"
-              : modoDelimitacion
+              : modo === "agregar"
                 ? "Agregar Delimitación"
                 : "Delimitar Área"}{" "}
             - Piso {pisoSeleccionado?.NumeroPiso}
@@ -249,6 +317,12 @@ export default function PlanoModal({
                 {Math.round(normalizarRect(rectangulo).height)} px
               </p>
             )}
+            {(modo === "agregar" || modo === "editar") && (
+              <p className="text-sm text-gray-600 mt-2">
+                ℹ️ Las áreas de otras zonas se muestran más transparentes para
+                evitar superposiciones
+              </p>
+            )}
           </div>
 
           <div className="relative inline-block">
@@ -261,7 +335,7 @@ export default function PlanoModal({
                 if (canvasRef.current) {
                   canvasRef.current.width = e.target.width;
                   canvasRef.current.height = e.target.height;
-                  dibujarDelimitacionesExistentes();
+                  redibujarDelimitaciones();
                 }
               }}
             />
@@ -280,12 +354,16 @@ export default function PlanoModal({
               disabled={!rectangulo}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
             >
-              {modoDelimitacion ? "Agregar Delimitación" : "Asignar Área"}
+              {modo === "editar"
+                ? "Guardar Cambios"
+                : modo === "agregar"
+                  ? "Agregar Delimitación"
+                  : "Asignar Área"}
             </button>
             <button
               onClick={() => {
                 setRectangulo(null);
-                dibujarDelimitacionesExistentes();
+                redibujarDelimitaciones();
               }}
               className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
             >
