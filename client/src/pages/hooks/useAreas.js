@@ -1,9 +1,11 @@
 // client/src/hooks/useAreas.js  
 import { useState, useEffect } from 'react';  
+import { logError, handleAPIResponse, APIError } from '../utils/errorHandler';  
   
 export function useAreas() {  
   const API = import.meta.env.VITE_API_URL || "http://localhost:3000";  
     
+  // Estados principales  
   const [pisos, setPisos] = useState([]);  
   const [areas, setAreas] = useState([]);  
   const [areasPiso, setAreasPiso] = useState([]);  
@@ -22,10 +24,12 @@ export function useAreas() {
   const cargarDatos = async () => {  
     try {  
       const resPisos = await fetch(`${API}/api/pisos`);  
+      await handleAPIResponse(resPisos, 'GET /api/pisos');  
       const dataPisos = await resPisos.json();  
       setPisos(dataPisos);  
   
       const resAreas = await fetch(`${API}/api/areas`);  
+      await handleAPIResponse(resAreas, 'GET /api/areas');  
       const dataAreas = await resAreas.json();  
         
       if (Array.isArray(dataAreas)) {  
@@ -34,7 +38,12 @@ export function useAreas() {
         setAreas([]);  
       }  
     } catch (error) {  
-      console.error("Error al cargar datos:", error);  
+      if (error instanceof APIError) {  
+        setMensaje({ tipo: 'error', texto: `✗ ${error.message}` });  
+      } else {  
+        logError(error, { action: 'cargarDatos' });  
+        setMensaje({ tipo: 'error', texto: '✗ Error al cargar datos iniciales' });  
+      }  
       setAreas([]);  
       setPisos([]);  
     } finally {  
@@ -46,52 +55,65 @@ export function useAreas() {
     setLoadingAreas(true);  
     try {  
       const res = await fetch(`${API}/api/areas/piso/${idPiso}`);  
-      if (!res.ok) {  
-        setAreasPiso([]);  
-        setMensaje({ tipo: "error", texto: "Error al cargar áreas del piso" });  
-        return;  
-      }  
+      await handleAPIResponse(res, `GET /api/areas/piso/${idPiso}`);  
         
       const data = await res.json();  
+        
       if (Array.isArray(data)) {  
         setAreasPiso(data);  
           
-        // NUEVO: Cargar delimitaciones para cada área  
-        await cargarTodasLasDelimitaciones(data);  
+        // Cargar delimitaciones para cada área  
+        const delimitacionesMap = {};  
+        for (const areaPiso of data) {  
+          const dels = await cargarDelimitaciones(areaPiso.IdAreaPiso);  
+          delimitacionesMap[areaPiso.IdAreaPiso] = dels;  
+        }  
+        setDelimitaciones(delimitacionesMap);  
       } else {  
         setAreasPiso([]);  
+        setMensaje({ tipo: 'error', texto: 'Formato de datos incorrecto' });  
       }  
     } catch (error) {  
-      console.error("Error al cargar áreas del piso:", error);  
+      if (error instanceof APIError) {  
+        setMensaje({ tipo: 'error', texto: `✗ ${error.message}` });  
+      } else {  
+        logError(error, { action: 'cargarAreasPiso', idPiso });  
+        setMensaje({ tipo: 'error', texto: '✗ Error al cargar áreas del piso' });  
+      }  
       setAreasPiso([]);  
     } finally {  
       setLoadingAreas(false);  
     }  
   };  
     
-  // NUEVO: Cargar todas las delimitaciones de las áreas del piso  
-  const cargarTodasLasDelimitaciones = async (areasDelPiso) => {  
-    const delims = {};  
-      
-    for (const areaPiso of areasDelPiso) {  
-      try {  
-        const res = await fetch(`${API}/api/areas/piso/${areaPiso.IdAreaPiso}/delimitaciones`);  
-        if (res.ok) {  
-          const data = await res.json();  
-          delims[areaPiso.IdAreaPiso] = Array.isArray(data) ? data : [];  
-        }  
-      } catch (error) {  
-        console.error(`Error al cargar delimitaciones de ${areaPiso.IdAreaPiso}:`, error);  
-        delims[areaPiso.IdAreaPiso] = [];  
+  const cargarDelimitaciones = async (idAreaPiso) => {  
+    try {  
+      const res = await fetch(`${API}/api/areas/piso/${idAreaPiso}/delimitaciones`);  
+      await handleAPIResponse(res, `GET /api/areas/piso/${idAreaPiso}/delimitaciones`);  
+        
+      const data = await res.json();  
+      return Array.isArray(data) ? data : [];  
+    } catch (error) {  
+      if (error instanceof APIError) {  
+        // Ya fue loggeado por handleAPIResponse  
+        setMensaje({   
+          tipo: 'error',   
+          texto: `✗ ${error.message}`   
+        });  
+      } else {  
+        logError(error, { action: 'cargarDelimitaciones', idAreaPiso });  
+        setMensaje({   
+          tipo: 'error',   
+          texto: '✗ Error inesperado al cargar delimitaciones'   
+        });  
       }  
+      return [];  
     }  
-      
-    setDelimitaciones(delims);  
   };  
     
   const handleAsignarArea = async (idArea, nombreArea) => {  
     if (!confirm(`¿Quieres añadir el área "${nombreArea}" a este piso?`)) return;  
-      
+  
     try {  
       const token = localStorage.getItem("token");  
       const res = await fetch(`${API}/api/areas/piso`, {  
@@ -103,25 +125,21 @@ export function useAreas() {
         body: JSON.stringify({ idArea, idPiso: pisoSeleccionado.IDPiso }),  
       });  
   
-      if (res.ok) {  
-        setMensaje({ tipo: "success", texto: "✓ Área asignada exitosamente" });  
-        await cargarAreasPiso(pisoSeleccionado.IDPiso);  
-        return true;  
-      } else if (res.status === 401) {  
-        setMensaje({ tipo: "error", texto: "✗ No autorizado" });  
-        return false;  
-      } else {  
-        setMensaje({ tipo: "error", texto: "✗ Error al asignar área" });  
-        return false;  
-      }  
+      await handleAPIResponse(res, 'POST /api/areas/piso');  
+        
+      setMensaje({ tipo: "success", texto: "✓ Área asignada exitosamente" });  
+      await cargarAreasPiso(pisoSeleccionado.IDPiso);  
     } catch (error) {  
-      setMensaje({ tipo: "error", texto: "✗ Error al asignar área" });  
-      return false;  
+      if (error instanceof APIError) {  
+        setMensaje({ tipo: 'error', texto: `✗ ${error.message}` });  
+      } else {  
+        logError(error, { action: 'handleAsignarArea', idArea, nombreArea });  
+        setMensaje({ tipo: "error", texto: "✗ Error al asignar área" });  
+      }  
     }  
   };  
     
-  // NUEVO: Crear nueva delimitación (permite múltiples)  
-  const crearDelimitacion = async (idAreaPiso, coordX, coordY, ancho, alto) => {  
+  const crearDelimitacion = async (idAreaPiso, rectangulo) => {  
     try {  
       const token = localStorage.getItem("token");  
       const res = await fetch(`${API}/api/areas/piso/${idAreaPiso}/delimitacion`, {  
@@ -130,49 +148,65 @@ export function useAreas() {
           "Content-Type": "application/json",  
           Authorization: `Bearer ${token}`,  
         },  
-        body: JSON.stringify({ coordX, coordY, ancho, alto }),  
+        body: JSON.stringify({  
+          coordX: Math.round(rectangulo.x),  
+          coordY: Math.round(rectangulo.y),  
+          ancho: Math.round(rectangulo.width),  
+          alto: Math.round(rectangulo.height)  
+        }),  
       });  
   
-      if (res.ok) {  
-        setMensaje({ tipo: "success", texto: "✓ Delimitación creada exitosamente" });  
-        await cargarAreasPiso(pisoSeleccionado.IDPiso);  
-        return true;  
-      } else {  
-        setMensaje({ tipo: "error", texto: "✗ Error al crear delimitación" });  
-        return false;  
-      }  
+      await handleAPIResponse(res, `POST /api/areas/piso/${idAreaPiso}/delimitacion`);  
+        
+      setMensaje({ tipo: 'success', texto: '✓ Delimitación creada exitosamente' });  
+        
+      // Recargar delimitaciones  
+      const dels = await cargarDelimitaciones(idAreaPiso);  
+      setDelimitaciones(prev => ({  
+        ...prev,  
+        [idAreaPiso]: dels  
+      }));  
+        
+      return true;  
     } catch (error) {  
-      setMensaje({ tipo: "error", texto: "✗ Error al crear delimitación" });  
+      if (error instanceof APIError) {  
+        setMensaje({ tipo: 'error', texto: `✗ ${error.message}` });  
+      } else {  
+        logError(error, { action: 'crearDelimitacion', idAreaPiso, rectangulo });  
+        setMensaje({ tipo: 'error', texto: '✗ Error al crear delimitación' });  
+      }  
       return false;  
     }  
   };  
     
   const handleEliminarArea = async (idAreaPiso) => {  
     if (!confirm("¿Estás seguro de eliminar esta área del piso?")) return;  
-      
+  
     try {  
       const token = localStorage.getItem("token");  
       const res = await fetch(`${API}/api/areas/piso/${idAreaPiso}`, {  
         method: "DELETE",  
-        headers: { Authorization: `Bearer ${token}` },  
+        headers: {  
+          Authorization: `Bearer ${token}`,  
+        },  
       });  
   
-      if (res.ok) {  
-        setMensaje({ tipo: "success", texto: "✓ Área eliminada exitosamente" });  
-        await cargarAreasPiso(pisoSeleccionado.IDPiso);  
-        return true;  
-      } else {  
-        setMensaje({ tipo: "error", texto: "✗ Error al eliminar área" });  
-        return false;  
-      }  
+      await handleAPIResponse(res, `DELETE /api/areas/piso/${idAreaPiso}`);  
+        
+      setMensaje({ tipo: "success", texto: "✓ Área eliminada exitosamente" });  
+      await cargarAreasPiso(pisoSeleccionado.IDPiso);  
     } catch (error) {  
-      setMensaje({ tipo: "error", texto: "✗ Error al eliminar área" });  
-      return false;  
+      if (error instanceof APIError) {  
+        setMensaje({ tipo: 'error', texto: `✗ ${error.message}` });  
+      } else {  
+        logError(error, { action: 'handleEliminarArea', idAreaPiso });  
+        setMensaje({ tipo: "error", texto: "✗ Error al eliminar área" });  
+      }  
     }  
   };  
     
   return {  
-    // Estado  
+    // Estados  
     pisos,  
     areas,  
     areasPiso,  
@@ -182,12 +216,15 @@ export function useAreas() {
     mensaje,  
     delimitaciones,  
       
-    // Acciones  
+    // Setters  
     setPisoSeleccionado,  
     setMensaje,  
+      
+    // Funciones  
     cargarAreasPiso,  
+    cargarDelimitaciones,  
     handleAsignarArea,  
     handleEliminarArea,  
-    crearDelimitacion,  
+    crearDelimitacion  
   };  
 }

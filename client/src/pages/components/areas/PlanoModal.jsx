@@ -85,28 +85,39 @@ export default function PlanoModal({
     }  
   };  
   
-  const dibujarDelimitacionesExistentes = () => {  
-    if (!canvasRef.current) return;  
-    const canvas = canvasRef.current;  
-    const ctx = canvas.getContext("2d");  
-    ctx.clearRect(0, 0, canvas.width, canvas.height);  
-  
-    const colors = [  
-      { stroke: "#3B82F6", fill: "rgba(59, 130, 246, 0.15)" },  
-      { stroke: "#10B981", fill: "rgba(16, 185, 129, 0.15)" },  
-      { stroke: "#F59E0B", fill: "rgba(245, 158, 11, 0.15)" },  
-    ];  
-  
-    const delims = delimitaciones[areaPisoSeleccionada] || [];  
-    delims.forEach((delim, index) => {  
-      const color = colors[index % colors.length];  
-      ctx.strokeStyle = color.stroke;  
-      ctx.lineWidth = 3;  
-      ctx.fillStyle = color.fill;  
-      ctx.fillRect(delim.PosicionX, delim.PosicionY, delim.Ancho, delim.Alto);  
-      ctx.strokeRect(delim.PosicionX, delim.PosicionY, delim.Ancho, delim.Alto);  
-    });  
-  };  
+const dibujarDelimitacionesExistentes = () => {      
+  if (!canvasRef.current) return;      
+  const canvas = canvasRef.current;      
+  const ctx = canvas.getContext("2d");      
+  ctx.clearRect(0, 0, canvas.width, canvas.height);      
+      
+  const colors = [    
+    { stroke: "#3B82F6", fill: "rgba(59, 130, 246, 0.15)" },    
+    { stroke: "#10B981", fill: "rgba(16, 185, 129, 0.15)" },    
+    { stroke: "#F59E0B", fill: "rgba(245, 158, 11, 0.15)" },    
+    { stroke: "#EF4444", fill: "rgba(239, 68, 68, 0.15)" },    
+    { stroke: "#8B5CF6", fill: "rgba(139, 92, 246, 0.15)" },    
+    { stroke: "#EC4899", fill: "rgba(236, 72, 153, 0.15)" },    
+  ];    
+      
+  const delims = delimitaciones[areaPisoSeleccionada] || [];      
+  if (delims.length === 0) return;    
+      
+  // ✅ Validar que exista IdArea  
+  const idArea = delims[0]?.IdArea;  
+  if (idArea === undefined) return;  
+    
+  const color = colors[idArea % colors.length];    
+      
+  // Dibujar todas las delimitaciones con el mismo color    
+  delims.forEach((delim) => {      
+    ctx.strokeStyle = color.stroke;      
+    ctx.lineWidth = 3;      
+    ctx.fillStyle = color.fill;      
+    ctx.fillRect(delim.PosicionX, delim.PosicionY, delim.Ancho, delim.Alto);      
+    ctx.strokeRect(delim.PosicionX, delim.PosicionY, delim.Ancho, delim.Alto);      
+  });      
+};
   
   const dibujarRectangulo = () => {  
     if (!canvasRef.current || !rectangulo) return;  

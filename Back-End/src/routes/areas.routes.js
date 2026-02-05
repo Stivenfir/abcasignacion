@@ -249,7 +249,32 @@ router.post("/piso/:idAreaPiso/delimitacion", authenticateToken, async (req, res
   }    
 });
 
-
+// GET - Obtener todas las delimitaciones de un área específica  
+router.get("/piso/:idAreaPiso/delimitaciones", async (req, res) => {  
+  const { idAreaPiso } = req.params;  
+    
+  try {  
+    var Rta = await GetData(`GetDelimitaciones=${idAreaPiso}`);  
+      
+    if (!Rta || Rta.trim().startsWith(':')) {  
+      return res.status(503).json({   
+        message: "Servicio de base de datos no disponible"   
+      });  
+    }  
+      
+    var S = Rta.trim();  
+    var D = JSON.parse(S.trim())["data"];  
+      
+    if (!Array.isArray(D)) {  
+      return res.json([]);  
+    }  
+      
+    return res.json(D);  
+  } catch(error) {  
+    console.error('Error al obtener delimitaciones:', error);  
+    return res.status(500).json({ message: error.message });  
+  }  
+});
 
 
 

@@ -20,58 +20,58 @@ export default function MapaCompletoModal({
     }  
   }, [areasPiso, delimitaciones]);  
   
-  const dibujarTodasLasDelimitaciones = () => {  
-    if (!canvasPreviewRef.current) return;  
-  
-    const canvas = canvasPreviewRef.current;  
-    const ctx = canvas.getContext("2d");  
-    ctx.clearRect(0, 0, canvas.width, canvas.height);  
-  
-    const colors = [  
-      { stroke: "#3B82F6", fill: "rgba(59, 130, 246, 0.15)" },  
-      { stroke: "#10B981", fill: "rgba(16, 185, 129, 0.15)" },  
-      { stroke: "#F59E0B", fill: "rgba(245, 158, 11, 0.15)" },  
-      { stroke: "#EF4444", fill: "rgba(239, 68, 68, 0.15)" },  
-      { stroke: "#8B5CF6", fill: "rgba(139, 92, 246, 0.15)" },  
-      { stroke: "#EC4899", fill: "rgba(236, 72, 153, 0.15)" },  
-    ];  
-  
-    // Dibujar todas las delimitaciones de todas las áreas  
-    areasPiso.forEach((areaPiso, areaIndex) => {  
-      const area = areas.find((a) => a.IdArea === areaPiso.IdArea);  
-      const delimitacionesArea = delimitaciones[areaPiso.IdAreaPiso] || [];  
-      const color = colors[areaIndex % colors.length];  
-  
-      // Dibujar cada delimitación del área  
-      delimitacionesArea.forEach((delimitacion) => {  
-        ctx.strokeStyle = color.stroke;  
-        ctx.lineWidth = 3;  
-        ctx.fillStyle = color.fill;  
-  
-        ctx.fillRect(  
-          Number(delimitacion.PosicionX),  
-          Number(delimitacion.PosicionY),  
-          Number(delimitacion.Ancho),  
-          Number(delimitacion.Alto)  
-        );  
-        ctx.strokeRect(  
-          Number(delimitacion.PosicionX),  
-          Number(delimitacion.PosicionY),  
-          Number(delimitacion.Ancho),  
-          Number(delimitacion.Alto)  
-        );  
-  
-        // Etiqueta con nombre del área  
-        ctx.fillStyle = color.stroke;  
-        ctx.font = "14px Arial";  
-        ctx.fillText(  
-          area?.NombreArea || `Área ${areaPiso.IdArea}`,  
-          Number(delimitacion.PosicionX) + 5,  
-          Number(delimitacion.PosicionY) + 20  
-        );  
-      });  
-    });  
-  };  
+const dibujarTodasLasDelimitaciones = () => {    
+  if (!canvasPreviewRef.current) return;    
+    
+  const canvas = canvasPreviewRef.current;    
+  const ctx = canvas.getContext("2d");    
+  ctx.clearRect(0, 0, canvas.width, canvas.height);    
+    
+  const colors = [    
+    { stroke: "#3B82F6", fill: "rgba(59, 130, 246, 0.15)" },    
+    { stroke: "#10B981", fill: "rgba(16, 185, 129, 0.15)" },    
+    { stroke: "#F59E0B", fill: "rgba(245, 158, 11, 0.15)" },    
+    { stroke: "#EF4444", fill: "rgba(239, 68, 68, 0.15)" },    
+    { stroke: "#8B5CF6", fill: "rgba(139, 92, 246, 0.15)" },    
+    { stroke: "#EC4899", fill: "rgba(236, 72, 153, 0.15)" },    
+  ];    
+    
+  // Dibujar todas las delimitaciones de todas las áreas    
+  areasPiso.forEach((areaPiso) => {  // ✅ Remover areaIndex  
+    const area = areas.find((a) => a.IdArea === areaPiso.IdArea);    
+    const delimitacionesArea = delimitaciones[areaPiso.IdAreaPiso] || [];    
+    const color = colors[areaPiso.IdArea % colors.length];  // ✅ Usar IdArea  
+    
+    // Dibujar cada delimitación del área    
+    delimitacionesArea.forEach((delimitacion) => {    
+      ctx.strokeStyle = color.stroke;    
+      ctx.lineWidth = 3;    
+      ctx.fillStyle = color.fill;    
+    
+      ctx.fillRect(    
+        Number(delimitacion.PosicionX),    
+        Number(delimitacion.PosicionY),    
+        Number(delimitacion.Ancho),    
+        Number(delimitacion.Alto)    
+      );    
+      ctx.strokeRect(    
+        Number(delimitacion.PosicionX),    
+        Number(delimitacion.PosicionY),    
+        Number(delimitacion.Ancho),    
+        Number(delimitacion.Alto)    
+      );    
+    
+      // Etiqueta con nombre del área    
+      ctx.fillStyle = color.stroke;    
+      ctx.font = "14px Arial";    
+      ctx.fillText(    
+        area?.NombreArea || `Área ${areaPiso.IdArea}`,    
+        Number(delimitacion.PosicionX) + 5,    
+        Number(delimitacion.PosicionY) + 20    
+      );    
+    });    
+  });    
+};
   
   return (  
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">  
@@ -106,7 +106,7 @@ export default function MapaCompletoModal({
           <div className="relative inline-block">  
             <img  
               ref={imagenPreviewRef}  
-              src={`${API}/api/pisos/plano/${pisoSeleccionado?.IDPiso}`}  
+              src={`${API}/uploads/planos/${pisoSeleccionado?.PlanoArchivo}`}
               alt="Plano del piso"  
               className="max-w-full h-auto border border-gray-300 rounded"  
               onLoad={(e) => {  
@@ -143,7 +143,7 @@ export default function MapaCompletoModal({
                   "#8B5CF6",  
                   "#EC4899",  
                 ];  
-                const color = colors[index % colors.length];  
+                const color = colors[areaPiso.IdArea % colors.length];
   
                 return (  
                   <div  
