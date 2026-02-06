@@ -13,6 +13,7 @@ import Areas from "./pages/Areas";
 import { isAuthed } from "./auth";
 import { pageVariants, pageTransition } from "./animations/pageTransitions";
 import DashboardLayout from "./layouts/DashboardLayout";
+import Puestos from "./pages/Puestos";
 
 function PrivateRoute({ children }) {
   return isAuthed() ? children : <Navigate to="/login" replace />;
@@ -81,8 +82,20 @@ function AppRoutes() {
           }
         />
 
+        <Route
+          path="/puestos"
+          element={
+            <PrivateRoute>
+              <AnimatedPage>
+                <Puestos />
+              </AnimatedPage>
+            </PrivateRoute>
+          }
+        />
+
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
+
       </Routes>
     </AnimatePresence>
   );

@@ -7,8 +7,8 @@ const menuItems = [
   { path: "/mis-reservas", label: "Mis Reservas", icon: "📋", roles: ["admin", "jefe", "empleado"] },  
     
   // Sección Admin  
-  { path: "/admin/plantas", label: "Gestión de Plantas", icon: "🏢", roles: ["admin"] },  
-  { path: "/admin/puestos", label: "Configuración de Puestos", icon: "🪑", roles: ["admin"] },  
+  { path: "/areas", label: "Gestión de Áreas", icon: "📍", roles: ["admin"] },
+  { path: "/puestos", label: "Gestión de Puestos", icon: "🪑", roles: ["admin"] },   
   { path: "/admin/usuarios", label: "Lista de Usuarios", icon: "👥", roles: ["admin"] },  
   { path: "/admin/asignaciones", label: "Re-asignar Puestos", icon: "🔄", roles: ["admin", "jefe"] },  
   { path: "/admin/parametros", label: "Parametrización", icon: "⚙️", roles: ["admin"] },  
@@ -21,7 +21,7 @@ export default function Sidebar({ isOpen, onClose }) {
   const username = localStorage.getItem("username") || "Usuario";  
   const userRole = localStorage.getItem("userRole") || "empleado";  
     
-  // Mapeo de roles en español con colores  
+
   const roleConfig = {  
     admin: { label: "Administrador", color: "text-blue-600", bgColor: "bg-blue-50" },  
     jefe: { label: "Jefe", color: "text-indigo-600", bgColor: "bg-indigo-50" },  
