@@ -43,21 +43,34 @@ async function ValidaUrs(usr, psw) {
   
   // Si no es usuario mock, validar con API externa  
   try {  
-    const response = await fetch(process.env.EXTERNAL_API_URL, {  
-      method: "POST",  
-      headers: {  
-        "Content-Type": "application/x-www-form-urlencoded",  
-        "TK": process.env.API_TOKEN  
-      },  
-      body: `CheckUsrABC=${usr}%20${psw}`  
-    });  
-      
-    const data = await response.text();
-    if(data.includes("distinguishedName")){
-      return { success: true, data: 'OK'}; 
+
+    const cabeceras= {  
+      "Content-Type": "application/x-www-form-urlencoded",  
+      "TK": process.env.API_TOKEN
+    }
+
+    const url=process.env.EXTERNAL_API_URL
+    var response = await fetch(url, {method: "POST", headers: cabeceras, body: `CheckUsrABC=${usr}%20${psw}`});
+    var S = await response.text();
+    if(!S.includes("distinguishedName")){
+      //console.log(S)
+      return { success: false, error: 'Credenciales inválidas' };      
     }
     else{
-      return { success: false, error: 'Credenciales inválidas' };
+
+      response = await fetch(url, {method: "POST", headers:cabeceras, body:`CheckRollABC='${usr}'`});
+      S = await response.text();
+      if(!S.includes("Usuario")){
+        return { success: false, error: 'Imposible obtener el tipo de usuario'};
+      }
+      else{
+        const data=JSON.parse(S.trim())["data"][0]; 
+        //console.log(data);
+        return {success: true, data:'OK',Type:data["IdRol"]}; 
+      }
+      
+      
+
     }  
      
   } catch (error) {  
@@ -83,8 +96,7 @@ router.post("/login", async (req, res) => {
   const token = jwt.sign(  
     {   
       username,   
-      role: result.role || 'empleado', // Por defecto empleado  
-      nombre: result.nombre || username,  
+      role: result.Type,
       timestamp: Date.now()   
     },  
     process.env.JWT_SECRET,  
@@ -96,7 +108,7 @@ router.post("/login", async (req, res) => {
     token,  
     user: {  
       username,  
-      role: result.role || 'empleado',  
+      role: result.Type,  
       nombre: result.nombre || username  
     }  
   });  

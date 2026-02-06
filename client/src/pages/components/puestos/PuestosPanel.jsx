@@ -14,6 +14,7 @@ export default function PuestosPanel({
   onSeleccionarArea,  
   onCrearPuesto,  
   onEliminarPuesto,  
+   onAbrirModalMapeo,
 }) {  
   const [modalVisible, setModalVisible] = useState(false);  
   const [puestoAEditar, setPuestoAEditar] = useState(null);  
@@ -107,12 +108,13 @@ export default function PuestosPanel({
                         {area.IdArea}  
                       </span>  
                     </div>  
+                    {/* ✅ Mostrar nombre del área */}  
                     <span className={`font-medium ${  
                       areaSeleccionada?.IdAreaPiso === area.IdAreaPiso  
                         ? "text-blue-900"  
                         : "text-gray-900"  
                     }`}>  
-                      Área {area.IdArea}  
+                      {area.NombreArea || `Área ${area.IdArea}`}  
                     </span>  
                   </div>  
                 </motion.button>  
@@ -127,7 +129,8 @@ export default function PuestosPanel({
             puestos={puestos}  
             clasificaciones={clasificaciones}  
             loadingPuestos={loadingPuestos}  
-            onAbrirModal={handleAbrirModal}  
+            onAbrirModal={handleAbrirModal} 
+            onAbrirModalMapeo={onAbrirModalMapeo} 
             onEliminarPuesto={onEliminarPuesto}  
           />  
         )}  
