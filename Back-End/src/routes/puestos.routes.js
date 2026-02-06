@@ -66,14 +66,16 @@ router.post("/", authenticateToken, async (req, res) => {
   const usuario = req.user.email;      
 
   const tieneMapeo = (ubicacionX !== null && ubicacionY !== null) ? 1 : 0;  
+  const disponibleNumerico = disponible === 'SI' ? 1 : 0;  
 
   logAuditoria('CREAR_PUESTO', usuario, { idAreaPiso, noPuesto, tieneMapeo });      
 
   try {      
     console.log("BODY:", req.body);
 
-    var Rta = await GetData(`EditABCDeskBooking=6,${idAreaPiso},${noPuesto},${ubicacionX || 'NULL'},${ubicacionY || 'NULL'},${idClasificacion},${tieneMapeo},0,'${disponible}'`);      
-
+var Rta = await GetData(  
+  `EditABCDeskBooking=6,${idAreaPiso},${noPuesto},${ubicacionX || 'NULL'},${ubicacionY || 'NULL'},${disponibleNumerico},${idClasificacion},0,${tieneMapeo}`  
+);
 
     var S = Rta.trim();
 
@@ -91,27 +93,60 @@ router.post("/", authenticateToken, async (req, res) => {
   }      
 });
     
-// PUT - Actualizar puesto (disponibilidad y clasificación)  
-router.put("/:idPuesto", authenticateToken, async (req, res) => {      
-  const { idPuesto } = req.params;      
-  const { disponible, idClasificacion } = req.body;      
-  const usuario = req.user.email;      
-        
-  logAuditoria('ACTUALIZAR_PUESTO', usuario, { idPuesto });      
-    
-  try {      
-     
-    var Rta = await GetData(`EditABCDeskBooking=7,${idPuesto},${disponible},${idClasificacion}`);      
-    var S = Rta.trim();      
-    var D = JSON.parse(S.trim());      
-          
-    logAuditoria('ACTUALIZAR_PUESTO', usuario, { resultado: 'success' });      
-    return res.json(D);      
-  } catch(error) {      
-    logAuditoria('ACTUALIZAR_PUESTO', usuario, { resultado: 'error', error: error.message });      
-    return res.status(500).json({ message: error.message });      
-  }      
-});    
+// En puestos.routes.js, endpoint PUT /:idPuesto  
+router.put("/:idPuesto", authenticateToken, async (req, res) => {
+  const { idPuesto } = req.params;
+  const { ubicacionX, ubicacionY, disponible, idClasificacion } = req.body;
+  const usuario = req.user.email;
+
+
+
+  try {
+    const query = `EditABCDeskBooking=7,${idPuesto},${ubicacionX || 'NULL'},${ubicacionY || 'NULL'},0,${idClasificacion || 'NULL'},0,0,'${disponible}'`;
+
+
+
+    var Rta = await GetData(query);
+
+
+
+    // Validar respuesta
+    if (!Rta || Rta.trim().startsWith('Array') || Rta.trim().startsWith(':')) {
+      console.error('Error de BD:', Rta);
+
+      logAuditoria('ACTUALIZAR_PUESTO', usuario, {
+        idPuesto,
+        resultado: 'error',
+        error: 'Servicio de base de datos devolvió formato inválido'
+      });
+
+      return res.status(503).json({
+        message: "Servicio de base de datos devolvió formato inválido"
+      });
+    }
+
+    var S = Rta.trim();
+
+    var D = JSON.parse(S.trim());
+
+
+    logAuditoria('ACTUALIZAR_PUESTO', usuario, { idPuesto, resultado: 'success' });
+
+    return res.json(D);
+
+  } catch (error) {
+    console.error("ERROR EN PUT PUESTO:");
+    console.error(error);
+
+    logAuditoria('ACTUALIZAR_PUESTO', usuario, {
+      idPuesto,
+      resultado: 'error',
+      error: error.message
+    });
+
+    return res.status(500).json({ message: error.message });
+  }
+});
   
 // ✅ NUEVO: PUT - Actualizar coordenadas del puesto (mapeo)  
 router.put("/:idPuesto/mapeo", authenticateToken, async (req, res) => {  
