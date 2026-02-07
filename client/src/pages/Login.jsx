@@ -38,17 +38,29 @@ export default function Login() {
         setToken(data?.token);
         localStorage.setItem("username", username);
 
+        console.log("Datos ::", data["user"]["role"]);
 
-        const userRole =
-          username.toLowerCase() === "admin" ? "admin" : "empleado";
-        localStorage.setItem("userRole", userRole);
+        // const userRole =
+        //   username.toLowerCase() === "admin" ? "admin" : "empleado";
+        // localStorage.setItem("userRole", userRole);
 
         setSuccessMessage(`✔ Bienvenido, ${username}`);
-        setTimeout(() => navigate("/dashboard"), 900);
+        switch (data["user"]["role"]) {
+            case "1":
+                setTimeout(() => navigate("/dashboard"), 900);
+                break;
+            case "2":
+                setTimeout(() => navigate("/l_dashboard"), 900);
+                break;
+            default:
+                setTimeout(() => navigate("/c_dashboard"), 900);
+        }
+        
       } else {
         setError(data?.message || "Usuario o contraseña incorrectos");
       }
-    } catch {
+    } catch(error) {
+      console.error('Error:', error); 
       setError("No se pudo conectar con el servidor. Intenta de nuevo.");
     } finally {
       setLoading(false);
