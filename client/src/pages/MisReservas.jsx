@@ -85,52 +85,70 @@ const handleSolicitarReserva = async (fechaSeleccionada) => {
 }; 
     
   // ✅ CORREGIDO: Crear la reserva después de confirmar  
-  const handleConfirmarReserva = async () => {    
-    if (!reservaPendiente) return;  
-  
-    try {    
-      const token = localStorage.getItem("token");    
-      const idEmpleado = localStorage.getItem("userId"); // Asume que guardas el ID del usuario  
-        
-      const res = await fetch(`${API}/api/reservas`, {    
-        method: "POST",    
-        headers: {    
-          "Content-Type": "application/json",    
-          Authorization: `Bearer ${token}`,    
-        },    
-        body: JSON.stringify({    
-          idEmpleado: Number(idEmpleado),    
-          idPuestoTrabajo: reservaPendiente.puestoAsignado.IdPuestoTrabajo,    
-          fecha: reservaPendiente.fecha    
-        }),    
-      });    
-        
-      if (!res.ok) {  
-        throw new Error('Error al crear la reserva');  
-      }  
-  
-      const data = await res.json();    
-        
-      reservasData.setMensaje({     
-        tipo: 'success',     
-        texto: `✓ Reserva creada exitosamente - Puesto #${reservaPendiente.puestoAsignado.NoPuesto}`     
-      });    
-        
-      // Recargar reservas del usuario  
-      await reservasData.cargarReservas(idEmpleado);    
-        
-      // Cerrar modal  
-      setModalConfirmacion(false);    
-      setReservaPendiente(null);    
-        
-    } catch (error) {    
-      console.error('Error al confirmar reserva:', error);    
-      reservasData.setMensaje({     
-        tipo: 'error',     
-        texto: '✗ Error al crear la reserva'     
-      });    
-    }    
-  };    
+const handleConfirmarReserva = async () => {  
+  try {  
+    console.log('📍 Confirmando reserva con:', reservaPendiente);  
+      
+    // ✅ Validar que tenemos todos los datos necesarios  
+    if (!reservaPendiente?.puestoAsignado?.IdPuestoTrabajo) {  
+      throw new Error('No se pudo obtener el ID del puesto');  
+    }  
+      
+    if (!reservaPendiente?.fecha) {  
+      throw new Error('No se pudo obtener la fecha de reserva');  
+    }  
+      
+    const token = localStorage.getItem('token');  
+      
+    // ✅ Convertir fecha a formato YYYY-MM-DD  
+    const fechaFormateada = reservaPendiente.fecha instanceof Date  
+      ? reservaPendiente.fecha.toISOString().split('T')[0]  
+      : reservaPendiente.fecha;  
+      
+    console.log('📍 Datos a enviar:', {  
+      idPuestoTrabajo: reservaPendiente.puestoAsignado.IdPuestoTrabajo,  
+      fecha: fechaFormateada  
+    });  
+      
+    const res = await fetch(`${API}/api/reservas`, {  
+      method: 'POST',  
+      headers: {  
+        'Content-Type': 'application/json',  
+        'Authorization': `Bearer ${token}`  
+      },  
+      body: JSON.stringify({  
+        idPuestoTrabajo: Number(reservaPendiente.puestoAsignado.IdPuestoTrabajo),  
+        fecha: fechaFormateada  
+      })  
+    });  
+      
+    console.log('📍 Response status:', res.status);  
+      
+    if (!res.ok) {  
+      const errorData = await res.json();  
+      console.error('❌ Error del servidor:', errorData);  
+      throw new Error('Error al crear la reserva');  
+    }  
+      
+    reservasData.setMensaje({   
+      tipo: 'success',   
+      texto: '✓ Reserva creada exitosamente'   
+    });  
+      
+    setModalConfirmacion(false);  
+    setReservaPendiente(null);  
+      
+    // Recargar reservas  
+    await reservasData.cargarDatos();  
+      
+  } catch (error) {  
+    console.error('Error al confirmar reserva:', error);  
+    reservasData.setMensaje({   
+      tipo: 'error',   
+      texto: `✗ ${error.message}`   
+    });  
+  }  
+};
     
   if (reservasData.loading) {    
     return (    
