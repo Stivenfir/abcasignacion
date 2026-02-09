@@ -18,6 +18,7 @@ import DashboardLayout from "./layouts/DashboardLayout";
 import L_DashboardLayout from "./layouts/DashboardLayoutLeader";
 import C_DashboardLayout from "./layouts/DashboardLayoutCustom";
 import Puestos from "./pages/Puestos";
+import MisReservas from "./pages/MisReservas"; // ⬅️ Agregar import 
 
 function PrivateRoute({ children }) {
   return isAuthed() ? children : <Navigate to="/login" replace />;
@@ -64,7 +65,7 @@ function AppRoutes() {
           }
         />
 
-          <Route
+        <Route
           path="/l_dashboard"
           element={
             <PrivateRoute>
@@ -115,6 +116,17 @@ function AppRoutes() {
               <AnimatedPage>
                 <Puestos />
               </AnimatedPage>
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/mis-reservas"
+          element={
+            <PrivateRoute>
+              <DashboardLayout>
+                <MisReservas />
+              </DashboardLayout>
             </PrivateRoute>
           }
         />
