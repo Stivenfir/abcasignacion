@@ -8,12 +8,17 @@ import {
 import { AnimatePresence, motion } from "framer-motion";
 import Login from "./pages/Login";
 import Dashboard from "./pages/admin/Dashboard";
+import LD_Dashboard from "./pages/leader/Dashboard";
+import CM_Dashboard from "./pages/custom/Dashboard";
 import Mapa from "./pages/Mapa";
 import Areas from "./pages/Areas";
 import { isAuthed } from "./auth";
 import { pageVariants, pageTransition } from "./animations/pageTransitions";
 import DashboardLayout from "./layouts/DashboardLayout";
+import L_DashboardLayout from "./layouts/DashboardLayoutLeader";
+import C_DashboardLayout from "./layouts/DashboardLayoutCustom";
 import Puestos from "./pages/Puestos";
+import MisReservas from "./pages/MisReservas"; // ⬅️ Agregar import 
 
 function PrivateRoute({ children }) {
   return isAuthed() ? children : <Navigate to="/login" replace />;
@@ -61,6 +66,28 @@ function AppRoutes() {
         />
 
         <Route
+          path="/l_dashboard"
+          element={
+            <PrivateRoute>
+              <L_DashboardLayout>
+                <LD_Dashboard />
+              </L_DashboardLayout>
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/c_dashboard"
+          element={
+            <PrivateRoute>
+              <C_DashboardLayout>
+                <CM_Dashboard />
+              </C_DashboardLayout>
+            </PrivateRoute>
+          }
+        />
+
+        <Route
           path="/mapa"
           element={
             <PrivateRoute>
@@ -89,6 +116,17 @@ function AppRoutes() {
               <AnimatedPage>
                 <Puestos />
               </AnimatedPage>
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/mis-reservas"
+          element={
+            <PrivateRoute>
+              <DashboardLayout>
+                <MisReservas />
+              </DashboardLayout>
             </PrivateRoute>
           }
         />
