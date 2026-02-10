@@ -37,7 +37,8 @@ async function ValidaUrs(usr, psw) {
         data: 'OK',    
         role: MOCK_USERS[usr].role,    
         nombre: MOCK_USERS[usr].nombre,  
-        idEmpleado: MOCK_USERS[usr].idEmpleado  // ✅ Incluir en respuesta  
+        idEmpleado: MOCK_USERS[usr].idEmpleado,  // ✅ Incluir en respuesta  
+        idArea: MOCK_USERS[usr].idArea
       };    
     }    
     return { success: false, error: 'Credenciales inválidas' };    
@@ -81,7 +82,8 @@ async function ValidaUrs(usr, psw) {
       data: 'OK',  
       Type: data["IdRol"],  
       idEmpleado: data["IdEmpleado"],  // ✅ Agregar desde API  
-      nombre: data["Nombre"] || usr     // ✅ También el nombre si está disponible  
+      nombre: data["Nombre"] || usr ,    // ✅ También el nombre si está disponible
+      idArea: data["IdArea"]
       
     };   
   } catch (error) {    
@@ -109,7 +111,10 @@ router.post("/login", async (req, res) => {
       username,     
       idEmpleado: result.idEmpleado,  // ✅ Ya no será undefined  
       role: result.Type,  
-      timestamp: Date.now()     
+      idArea: result.idArea,
+      timestamp: Date.now() 
+
+
     },    
     process.env.JWT_SECRET,    
     { expiresIn: '8h' }    
