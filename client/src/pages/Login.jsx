@@ -32,19 +32,32 @@ export default function Login() {
       let data = null;
       try {
         data = await response.json();
-      } catch {}
+        console.log("Datos  ::  ",data["user"]["role"])
+      } catch(error) {
+          console.error("Error: ",error)
+      }
 
       if (response.ok) {
         setToken(data?.token);
         localStorage.setItem("username", username);
 
-
-        const userRole =
-          username.toLowerCase() === "admin" ? "admin" : "empleado";
-        localStorage.setItem("userRole", userRole);
-
         setSuccessMessage(`✔ Bienvenido, ${username}`);
-        setTimeout(() => navigate("/dashboard"), 900);
+        switch(data["user"]["role"]){
+          case '1':
+            setTimeout(() => navigate("/dashboard"), 900);
+            break;
+          case '2':
+            setTimeout(() => navigate("/l_dashboard"), 900);
+            break;
+          default:
+            setTimeout(() => navigate("/c_dashboard"), 900);
+        }
+        // const userRole =
+        //   username.toLowerCase() === "admin" ? "admin" : "empleado";
+        // localStorage.setItem("userRole", userRole);
+
+        
+        
       } else {
         setError(data?.message || "Usuario o contraseña incorrectos");
       }
@@ -129,3 +142,4 @@ export default function Login() {
     </div>
   );
 }
+ 

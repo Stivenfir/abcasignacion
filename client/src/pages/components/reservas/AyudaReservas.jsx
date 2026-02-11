@@ -113,7 +113,7 @@ export default function AyudaReservas({ pisos, onSeleccionarPiso }) {
           <span className="text-2xl">💡</span>    
           <div className="flex-1">    
             <h3 className="font-semibold text-green-900 mb-1">    
-              Sugerencias de disponibilidad para tu área    
+              disponibilidad para tu área    
             </h3>    
           </div>    
         </div>    
