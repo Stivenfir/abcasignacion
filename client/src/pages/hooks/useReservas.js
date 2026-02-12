@@ -98,15 +98,16 @@ export function useReservas() {
       if (!info) return reserva;
 
       return {
-        ...info,
         ...reserva,
-        IdPiso: reserva?.IdPiso ?? info.IdPiso,
-        NumeroPiso: reserva?.NumeroPiso ?? info.NumeroPiso,
-        IdArea: reserva?.IdArea ?? info.IdArea,
-        IdAreaPiso: reserva?.IdAreaPiso ?? info.IdAreaPiso,
-        NombreArea: reserva?.NombreArea || info.NombreArea,
-        UbicacionX: reserva?.UbicacionX ?? info.UbicacionX,
-        UbicacionY: reserva?.UbicacionY ?? info.UbicacionY,
+        // Priorizamos datos canónicos del catálogo de puestos para evitar
+        // usar snapshots viejos guardados en la reserva.
+        IdPiso: info.IdPiso ?? reserva?.IdPiso,
+        NumeroPiso: info.NumeroPiso ?? reserva?.NumeroPiso,
+        IdArea: info.IdArea ?? reserva?.IdArea,
+        IdAreaPiso: info.IdAreaPiso ?? reserva?.IdAreaPiso,
+        NombreArea: info.NombreArea || reserva?.NombreArea,
+        UbicacionX: info.UbicacionX ?? reserva?.UbicacionX,
+        UbicacionY: info.UbicacionY ?? reserva?.UbicacionY,
       };
     });
   };
