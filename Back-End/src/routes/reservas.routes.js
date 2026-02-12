@@ -41,45 +41,6 @@ function normalizeAreaId(rawArea) {
 
 
 
-function isValidApiTextResponse(rta) {
-  return Boolean(rta) && !rta.trim().startsWith('Array') && !rta.trim().startsWith(':');
-}
-
-async function resolverIdAreaPorEmpleado(idEmpleado) {
-  const idEmpleadoNum = Number(idEmpleado);
-  if (!Number.isInteger(idEmpleadoNum) || idEmpleadoNum <= 0) return null;
-
-  const query = `
-    SELECT TOP (1)
-      C.IDArea
-    FROM ABCDeskBooking.dbo.Empleado E
-    LEFT JOIN ABCDeskBooking.dbo.Cargo C ON C.IDCargo = E.IDCargo
-    WHERE E.IdEmpleado = ${idEmpleadoNum}
-  `;
-
-  const rta = await GetData(`ConsultaSQL=${encodeURIComponent(query)}`);
-  if (!isValidApiTextResponse(rta)) return null;
-
-  const data = JSON.parse(rta.trim())["data"];
-  if (!Array.isArray(data) || !data.length) return null;
-
-  return normalizeAreaId(data[0]?.IDArea);
-}
-
-async function obtenerAreaEfectiva(reqUser) {
-  const areaToken = normalizeAreaId(reqUser?.idArea);
-  if (areaToken) {
-    return { idArea: areaToken, source: 'token' };
-  }
-
-  const areaEmpleado = await resolverIdAreaPorEmpleado(reqUser?.idEmpleado);
-  if (areaEmpleado) {
-    return { idArea: areaEmpleado, source: 'empleado_cargo' };
-  }
-
-  return { idArea: null, source: 'sin_area' };
-}
-
 function logAuditoria(accion, usuario, detalles) {        
   const timestamp = new Date().toISOString();        
   const logEntry = { timestamp, accion, usuario, ...detalles };        
@@ -134,55 +95,64 @@ router.get("/empleado", authenticateToken, async (req, res) => {
 });     
         
 
-// GET - Obtener pisos habilitados para el área del usuario
+// GET - Obtener pisos habilitados para el área del usuario (sin consultas SQL directas)
 router.get("/pisos-habilitados", authenticateToken, async (req, res) => {
   const usuario = req.user.username;
-  let idArea = null;
-  let idAreaSource = "sin_area";
+  const idArea = req.user.idArea;
 
   try {
-    ({ idArea, source: idAreaSource } = await obtenerAreaEfectiva(req.user));
-    const queryPorArea = idArea
-      ? `
-      SELECT DISTINCT
-        P.IDPiso,
-        P.NumeroPiso,
-        P.Bodega,
-        COUNT(PT.IdPuestoTrabajo) as TotalPuestosArea
-      FROM ABCDeskBooking.dbo.Piso P
-      INNER JOIN ABCDeskBooking.dbo.AreaPiso AP ON AP.IdPiso = P.IDPiso
-      INNER JOIN ABCDeskBooking.dbo.PuestoTrabajo PT ON PT.IdAreaPiso = AP.IdAreaPiso
-      WHERE AP.IdArea = ${idArea}
-      GROUP BY P.IDPiso, P.NumeroPiso, P.Bodega
-      ORDER BY P.Bodega, P.NumeroPiso
-    `
-      : null;
-
-    let pisos = [];
-    const scope = "area";
-
-    if (queryPorArea) {
-      const rtaArea = await GetData(`ConsultaSQL=${encodeURIComponent(queryPorArea)}`);
-      if (isValidApiTextResponse(rtaArea)) {
-        const dataArea = JSON.parse(rtaArea.trim())["data"];
-        pisos = Array.isArray(dataArea) ? dataArea : [];
-      }
+    const hoySql = toSqlDateYYYYMMDD(new Date().toISOString().split("T")[0]);
+    if (!hoySql) {
+      return res.json({ pisos: [], scope: "area" });
     }
+
+    const Rta = await GetData(`ConsultaReservas=@P%3D2,@Fecha%3D'${hoySql}',@IdArea%3D${idArea}`);
+
+    if (!Rta || Rta.trim().startsWith('Array') || Rta.trim().startsWith(':')) {
+      logAuditoria('CONSULTAR_PISOS_HABILITADOS', usuario, {
+        idArea,
+        scope: 'area',
+        resultado: 'error',
+        error: 'Servicio de base de datos devolvió formato inválido'
+      });
+      return res.json({ pisos: [], scope: "area" });
+    }
+
+    const data = JSON.parse(Rta.trim())["data"];
+    const puestos = Array.isArray(data) ? data : [];
+
+    const pisosMap = new Map();
+    for (const puesto of puestos) {
+      const idPiso = Number(puesto.IdPiso);
+      if (!idPiso) continue;
+      const actual = pisosMap.get(idPiso) || {
+        IDPiso: idPiso,
+        NumeroPiso: puesto.IdPiso,
+        Bodega: null,
+        TotalPuestosArea: 0,
+      };
+      actual.TotalPuestosArea += 1;
+      pisosMap.set(idPiso, actual);
+    }
+
+    const pisos = Array.from(pisosMap.values()).sort((a, b) =>
+      (Number(a.Bodega) || 0) - (Number(b.Bodega) || 0) ||
+      (Number(a.NumeroPiso) || 0) - (Number(b.NumeroPiso) || 0),
+    );
 
     logAuditoria('CONSULTAR_PISOS_HABILITADOS', usuario, {
       idArea,
-      idAreaSource,
-      scope,
+      scope: 'area',
       resultado: 'success',
       cantidad: pisos.length,
     });
 
-    return res.json({ pisos, scope });
+    return res.json({ pisos, scope: "area" });
   } catch (error) {
     console.error('Error al obtener pisos habilitados:', error);
     logAuditoria('CONSULTAR_PISOS_HABILITADOS', usuario, {
       idArea,
-      idAreaSource,
+      scope: 'area',
       resultado: 'error',
       error: error.message,
     });
@@ -195,11 +165,9 @@ router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {
   const { fecha } = req.params;      
   const { idPiso } = req.query;      
   const usuario = req.user.username;  
-  let idArea = null;
-  let idAreaSource = "sin_area";
+  const idArea = req.user.idArea;
             
   try {  
-    ({ idArea, source: idAreaSource } = await obtenerAreaEfectiva(req.user));
     const fechaSql = toSqlDateYYYYMMDD(fecha);
     if (!fechaSql) {
       return res.status(400).json({ message: "Fecha inválida. Usa formato YYYY-MM-DD" });
@@ -214,7 +182,6 @@ router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {
         fecha,      
         idPiso,  
         idArea,
-        idAreaSource,
         resultado: 'error',            
         error: 'Servicio de base de datos devolvió formato inválido'            
       });            
@@ -267,7 +234,6 @@ router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {
       fecha,      
       idPiso,  
       idArea,
-      idAreaSource,
       resultado: 'success',            
       cantidad: D.length            
     });            
@@ -279,7 +245,6 @@ router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {
       fecha,      
       idPiso,  
       idArea,
-      idAreaSource,
       resultado: 'error',            
       error: error.message            
     });            
@@ -290,24 +255,16 @@ router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {
 // GET - Obtener disponibilidad de puestos por área en un piso  
 router.get("/disponibilidad-area", authenticateToken, async (req, res) => {  
   const { idPiso } = req.query;  
+  const idArea = req.user.idArea;  
   const usuario = req.user.username;  
   
   try {  
-    const { idArea } = await obtenerAreaEfectiva(req.user);
-    if (!idArea) {
+    const hoySql = toSqlDateYYYYMMDD(new Date().toISOString().split("T")[0]);
+    if (!hoySql) {
       return res.json({ cantidadPuestos: 0 });
     }
-    // Consultar cuántos puestos tiene el área en ese piso  
-    const query = `  
-      SELECT COUNT(*) as cantidadPuestos  
-      FROM ABCDeskBooking.dbo.PuestoTrabajo PT  
-      INNER JOIN ABCDeskBooking.dbo.AreaPiso AP ON PT.IdAreaPiso = AP.IdAreaPiso  
-      WHERE AP.IdArea = ${idArea}  
-        AND AP.IdPiso = ${idPiso}  
-        AND PT.Disponible = 'SI'  
-    `;  
-  
-    var Rta = await GetData(`ConsultaSQL=${encodeURIComponent(query)}`);  
+
+    var Rta = await GetData(`ConsultaReservas=@P%3D2,@Fecha%3D'${hoySql}',@IdArea%3D${idArea}`);  
       
     if (!Rta || Rta.trim().startsWith('Array') || Rta.trim().startsWith(':')) {  
       return res.json({ cantidadPuestos: 0 });  
@@ -315,6 +272,8 @@ router.get("/disponibilidad-area", authenticateToken, async (req, res) => {
   
     var S = Rta.trim();  
     var D = JSON.parse(S.trim())["data"];  
+    const puestos = Array.isArray(D) ? D : [];
+    const cantidadPuestos = puestos.filter((p) => String(p.IdPiso) === String(idPiso)).length;
   
     logAuditoria('CONSULTAR_DISPONIBILIDAD_AREA', usuario, {  
       idArea,  
@@ -323,7 +282,7 @@ router.get("/disponibilidad-area", authenticateToken, async (req, res) => {
     });  
   
     return res.json({  
-      cantidadPuestos: D[0]?.cantidadPuestos || 0  
+      cantidadPuestos
     });  
   } catch (error) {  
     console.error('Error al obtener disponibilidad:', error);  
