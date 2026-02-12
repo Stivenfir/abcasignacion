@@ -20,6 +20,25 @@ async function GetData(P) {
   });        
 }        
         
+
+function toSqlDateYYYYMMDD(value) {
+  if (!value) return null;
+
+  const fecha = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(fecha.getTime())) return null;
+
+  const y = fecha.getFullYear();
+  const m = String(fecha.getMonth() + 1).padStart(2, '0');
+  const d = String(fecha.getDate()).padStart(2, '0');
+  return `${y}${m}${d}`;
+}
+
+
+function normalizeAreaId(rawArea) {
+  const parsed = Number(rawArea);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 function logAuditoria(accion, usuario, detalles) {        
   const timestamp = new Date().toISOString();        
   const logEntry = { timestamp, accion, usuario, ...detalles };        
@@ -73,16 +92,115 @@ router.get("/empleado", authenticateToken, async (req, res) => {
   }      
 });     
         
+
+// GET - Obtener pisos habilitados para el área del usuario
+router.get("/pisos-habilitados", authenticateToken, async (req, res) => {
+  const idArea = normalizeAreaId(req.user.idArea);
+  const usuario = req.user.username;
+
+  try {
+    const queryPorArea = idArea
+      ? `
+      SELECT DISTINCT
+        P.IDPiso,
+        P.NumeroPiso,
+        P.Bodega,
+        COUNT(PT.IdPuestoTrabajo) as TotalPuestosArea
+      FROM ABCDeskBooking.dbo.Piso P
+      INNER JOIN ABCDeskBooking.dbo.AreaPiso AP ON AP.IdPiso = P.IDPiso
+      INNER JOIN ABCDeskBooking.dbo.PuestoTrabajo PT ON PT.IdAreaPiso = AP.IdAreaPiso
+      WHERE AP.IdArea = ${idArea}
+      GROUP BY P.IDPiso, P.NumeroPiso, P.Bodega
+      ORDER BY P.Bodega, P.NumeroPiso
+    `
+      : null;
+
+    let pisos = [];
+    let scope = "area";
+
+    if (queryPorArea) {
+      const rtaArea = await GetData(`ConsultaSQL=${encodeURIComponent(queryPorArea)}`);
+      if (rtaArea && !rtaArea.trim().startsWith('Array') && !rtaArea.trim().startsWith(':')) {
+        const dataArea = JSON.parse(rtaArea.trim())["data"];
+        pisos = Array.isArray(dataArea) ? dataArea : [];
+      }
+    }
+
+    if (!pisos.length) {
+      const queryGlobal = `
+        SELECT DISTINCT
+          P.IDPiso,
+          P.NumeroPiso,
+          P.Bodega,
+          COUNT(PT.IdPuestoTrabajo) as TotalPuestosArea
+        FROM ABCDeskBooking.dbo.Piso P
+        INNER JOIN ABCDeskBooking.dbo.AreaPiso AP ON AP.IdPiso = P.IDPiso
+        INNER JOIN ABCDeskBooking.dbo.PuestoTrabajo PT ON PT.IdAreaPiso = AP.IdAreaPiso
+        GROUP BY P.IDPiso, P.NumeroPiso, P.Bodega
+        ORDER BY P.Bodega, P.NumeroPiso
+      `;
+
+      const rtaGlobal = await GetData(`ConsultaSQL=${encodeURIComponent(queryGlobal)}`);
+      if (rtaGlobal && !rtaGlobal.trim().startsWith('Array') && !rtaGlobal.trim().startsWith(':')) {
+        const dataGlobal = JSON.parse(rtaGlobal.trim())["data"];
+        pisos = Array.isArray(dataGlobal) ? dataGlobal : [];
+        scope = "global";
+      }
+    }
+
+    if (!pisos.length) {
+      const queryAllPisos = `
+        SELECT
+          P.IDPiso,
+          P.NumeroPiso,
+          P.Bodega,
+          NULL as TotalPuestosArea
+        FROM ABCDeskBooking.dbo.Piso P
+        ORDER BY P.Bodega, P.NumeroPiso
+      `;
+
+      const rtaAllPisos = await GetData(`ConsultaSQL=${encodeURIComponent(queryAllPisos)}`);
+      if (rtaAllPisos && !rtaAllPisos.trim().startsWith('Array') && !rtaAllPisos.trim().startsWith(':')) {
+        const dataAllPisos = JSON.parse(rtaAllPisos.trim())["data"];
+        pisos = Array.isArray(dataAllPisos) ? dataAllPisos : [];
+        scope = "all-pisos";
+      }
+    }
+
+    logAuditoria('CONSULTAR_PISOS_HABILITADOS', usuario, {
+      idArea,
+      scope,
+      resultado: 'success',
+      cantidad: pisos.length,
+    });
+
+    return res.json({ pisos, scope });
+  } catch (error) {
+    console.error('Error al obtener pisos habilitados:', error);
+    logAuditoria('CONSULTAR_PISOS_HABILITADOS', usuario, {
+      idArea,
+      resultado: 'error',
+      error: error.message,
+    });
+    return res.status(500).json({ message: error.message });
+  }
+});
+
 // GET - Obtener puestos disponibles para una fecha específica      
 router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {            
   const { fecha } = req.params;      
   const { idPiso } = req.query;      
   const usuario = req.user.username;  
-  const idArea = req.user.idArea;  // ✅ AGREGAR: Extraer idArea del token JWT  
+  const idArea = normalizeAreaId(req.user.idArea);  // ✅ AGREGAR: Extraer idArea del token JWT  
             
   try {  
+    const fechaSql = toSqlDateYYYYMMDD(fecha);
+    if (!fechaSql) {
+      return res.status(400).json({ message: "Fecha inválida. Usa formato YYYY-MM-DD" });
+    }
+
     // ✅ MODIFICAR: Pasar @IdArea al stored procedure  
-    var Rta = await GetData(`ConsultaReservas=@P%3D2,@Fecha%3D'${fecha}',@IdArea%3D${idArea}`);  
+    var Rta = await GetData(`ConsultaReservas=@P%3D2,@Fecha%3D'${fechaSql}'${idArea ? `,@IdArea%3D${idArea}` : ''}`);  
             
     if (!Rta || Rta.trim().startsWith('Array') || Rta.trim().startsWith(':')) {            
       console.error('Error de BD:', Rta);          
@@ -105,6 +223,16 @@ router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {
       return res.json([]);            
     }      
       
+    if (idArea && D.length === 0) {
+      const rtaGlobal = await GetData(`ConsultaReservas=@P%3D2,@Fecha%3D'${fechaSql}'`);
+      if (rtaGlobal && !rtaGlobal.trim().startsWith('Array') && !rtaGlobal.trim().startsWith(':')) {
+        const dataGlobal = JSON.parse(rtaGlobal.trim())["data"];
+        if (Array.isArray(dataGlobal)) {
+          D = dataGlobal;
+        }
+      }
+    }
+
     // ✅ Eliminar duplicados basándose en IdPuestoTrabajo    
     const puestosUnicos = [];    
     const idsVistos = new Set();    
@@ -122,6 +250,21 @@ router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {
     if (idPiso && Array.isArray(D)) {      
       D = D.filter(puesto => puesto.IdPiso == idPiso);      
     }      
+
+    // Orden estable para asignación automática (el frontend toma el primero)
+    D.sort((a, b) => {
+      const pisoA = Number(a.IdPiso) || 0;
+      const pisoB = Number(b.IdPiso) || 0;
+      if (pisoA !== pisoB) return pisoA - pisoB;
+
+      const puestoA = Number(a.NoPuesto);
+      const puestoB = Number(b.NoPuesto);
+      if (!Number.isNaN(puestoA) && !Number.isNaN(puestoB) && puestoA !== puestoB) {
+        return puestoA - puestoB;
+      }
+
+      return (Number(a.IdPuestoTrabajo) || 0) - (Number(b.IdPuestoTrabajo) || 0);
+    });
             
     logAuditoria('CONSULTAR_PUESTOS_DISPONIBLES', usuario, {            
       fecha,      
@@ -200,7 +343,7 @@ router.post("/", authenticateToken, async (req, res) => {
   }  
     
   // ✅ VALIDACIÓN 1: No permitir fechas pasadas  
-  const fechaReserva = new Date(fecha);  
+  const fechaReserva = new Date(`${fecha}T00:00:00`);  
   const hoy = new Date();  
   hoy.setHours(0, 0, 0, 0);  
   fechaReserva.setHours(0, 0, 0, 0);  
@@ -251,8 +394,13 @@ router.post("/", authenticateToken, async (req, res) => {
       }  
     }  
         
+    const fechaSql = toSqlDateYYYYMMDD(fecha);
+    if (!fechaSql) {
+      return res.status(400).json({ error: "Fecha inválida. Usa formato YYYY-MM-DD" });
+    }
+
     // Crear la reserva  
-    var Rta = await GetData(`EditReservas=@P%3D0,@IdEmpleado%3D${idEmpleado},@IdPuestoTrabajo%3D${idPuestoTrabajo},@Fecha%3D'${fecha}'`);        
+    var Rta = await GetData(`EditReservas=@P%3D0,@IdEmpleado%3D${idEmpleado},@IdPuestoTrabajo%3D${idPuestoTrabajo},@Fecha%3D'${fechaSql}'`);        
         
     if (!Rta || Rta.trim().startsWith('Array') || Rta.trim().startsWith(':')) {        
       console.error('Error de BD:', Rta);      
