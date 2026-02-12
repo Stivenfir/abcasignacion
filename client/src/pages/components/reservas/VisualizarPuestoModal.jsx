@@ -226,7 +226,7 @@ export default function VisualizarPuestoModal({
         </div>  
   
         {/* Contenido */}  
-        <div className="flex-1 overflow-hidden p-6">  
+        <div className="flex-1 overflow-y-auto p-6">  
           {loading ? (  
             <div className="flex flex-col items-center justify-center h-full">  
               <div className="w-16 h-16 border-4 border-green-600 border-t-transparent rounded-full animate-spin mb-4"></div>  
@@ -235,11 +235,11 @@ export default function VisualizarPuestoModal({
           ) : (  
             <div   
               ref={containerRef}  
-              className="h-full overflow-auto rounded-xl border-2 border-gray-200"  
+              className="h-full max-h-[65vh] overflow-x-auto overflow-y-scroll rounded-xl border-2 border-gray-200"  
               style={{   
                 display: 'flex',   
-                justifyContent: 'center',   
-                alignItems: 'center',  
+                justifyContent: 'flex-start',   
+                alignItems: 'flex-start',  
                 backgroundColor: '#F9FAFB'  
               }}  
             >  
@@ -249,7 +249,7 @@ export default function VisualizarPuestoModal({
                     ref={imagenRef}  
                     src={planoUrl}  
                     alt="Plano del piso"  
-                    className="max-w-full h-auto"  
+                    className="h-auto max-w-none"  
                     onLoad={(e) => {  
                       if (canvasRef.current) {  
                         canvasRef.current.width = e.target.width;  
@@ -269,7 +269,7 @@ export default function VisualizarPuestoModal({
         </div>  
   
         {/* Footer con instrucciones */}  
-        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-2xl">  
+        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-2xl sticky bottom-0">  
           <div className="flex items-start gap-4">  
             <div className="flex-1 grid grid-cols-3 gap-4">  
               <div className="flex items-center gap-2">  
