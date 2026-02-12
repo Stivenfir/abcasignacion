@@ -83,6 +83,9 @@ export function useReservas() {
               NombreArea: area?.NombreArea ?? null,
               UbicacionX: puesto?.UbicacionX ?? null,
               UbicacionY: puesto?.UbicacionY ?? null,
+              NoPuesto: puesto?.NoPuesto ?? puesto?.NumeroPuesto ?? puesto?.Puesto ?? null,
+              NumeroPuesto: puesto?.NumeroPuesto ?? null,
+              Puesto: puesto?.Puesto ?? null,
               Disponible: puesto?.Disponible,
             });
           }
@@ -106,6 +109,9 @@ export function useReservas() {
         IdArea: info.IdArea ?? reserva?.IdArea,
         IdAreaPiso: info.IdAreaPiso ?? reserva?.IdAreaPiso,
         NombreArea: info.NombreArea || reserva?.NombreArea,
+        NoPuesto: info.NoPuesto ?? reserva?.NoPuesto ?? reserva?.NumeroPuesto ?? reserva?.Puesto,
+        NumeroPuesto: info.NumeroPuesto ?? reserva?.NumeroPuesto,
+        Puesto: info.Puesto ?? reserva?.Puesto,
         UbicacionX: info.UbicacionX ?? reserva?.UbicacionX,
         UbicacionY: info.UbicacionY ?? reserva?.UbicacionY,
       };
