@@ -228,17 +228,66 @@ export default function MapaReservaModal({
   }, [API, pisoEfectivo, areaIdObjetivo, reservaRender?.IdAreaPiso, areaAsignada?.NombreArea]);
 
   useEffect(() => {
-    const inferirPisoDesdeDisponibles = async () => {
+    const inferirPisoDesdePuesto = async () => {
       if (pisoEfectivo?.IDPiso || !reservaRender) return;
 
       const idPuesto = getReservaIdPuesto(reservaRender);
       const fechaBase = String(reservaRender?.FechaReserva || "").trim().split(" ")[0];
-      if (!idPuesto || !fechaBase) return;
+      if (!idPuesto) return;
 
       const token = localStorage.getItem("token");
       if (!token) return;
 
       try {
+        // 1) Buscar el puesto en catálogo real (pisos -> áreas -> puestos), sin depender de disponibilidad diaria.
+        const resPisos = await fetch(`${API}/api/pisos`);
+        const pisos = resPisos.ok ? await resPisos.json() : [];
+        const listaPisos = Array.isArray(pisos) ? pisos : [];
+
+        for (const piso of listaPisos) {
+          const resAreas = await fetch(`${API}/api/areas/piso/${piso.IDPiso}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!resAreas.ok) continue;
+
+          const areas = await resAreas.json();
+          const listaAreas = Array.isArray(areas) ? areas : [];
+
+          const respuestas = await Promise.all(
+            listaAreas
+              .filter((a) => a?.IdAreaPiso)
+              .map((a) =>
+                fetch(`${API}/api/puestos/area/${a.IdAreaPiso}`, {
+                  headers: { Authorization: `Bearer ${token}` },
+                })
+                  .then((r) => (r.ok ? r.json() : []))
+                  .catch(() => []),
+              ),
+          );
+
+          const puestos = respuestas.flat().filter(Boolean);
+          const puesto = puestos.find((x) => Number(x?.IdPuestoTrabajo) === Number(idPuesto));
+
+          if (puesto) {
+            setPisoEfectivo({
+              IDPiso: Number(piso.IDPiso),
+              NumeroPiso: piso.NumeroPiso ?? piso.IDPiso,
+              Bodega: piso.Bodega ?? null,
+            });
+
+            setReservaRender((prev) => ({
+              ...(prev || {}),
+              ...puesto,
+              IdPiso: Number(piso.IDPiso),
+              NumeroPiso: piso.NumeroPiso ?? piso.IDPiso,
+            }));
+            return;
+          }
+        }
+
+        // 2) Fallback: intentar resolver por disponibles de la fecha si existe.
+        if (!fechaBase) return;
+
         const resDisp = await fetch(`${API}/api/reservas/disponibles/${fechaBase}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -246,18 +295,13 @@ export default function MapaReservaModal({
 
         const disponibles = await resDisp.json();
         const puesto = (Array.isArray(disponibles) ? disponibles : []).find(
-          (p) => Number(p?.IdPuestoTrabajo) === Number(idPuesto),
+          (x) => Number(x?.IdPuestoTrabajo) === Number(idPuesto),
         );
         if (!puesto?.IdPiso) return;
 
-        let pisoCatalogo = null;
-        const resPisos = await fetch(`${API}/api/pisos`);
-        if (resPisos.ok) {
-          const pisos = await resPisos.json();
-          pisoCatalogo = (Array.isArray(pisos) ? pisos : []).find(
-            (p) => Number(p?.IDPiso) === Number(puesto.IdPiso),
-          );
-        }
+        const pisoCatalogo = (Array.isArray(listaPisos) ? listaPisos : []).find(
+          (x) => Number(x?.IDPiso) === Number(puesto.IdPiso),
+        );
 
         setPisoEfectivo({
           IDPiso: Number(puesto.IdPiso),
@@ -271,7 +315,7 @@ export default function MapaReservaModal({
       }
     };
 
-    inferirPisoDesdeDisponibles();
+    inferirPisoDesdePuesto();
   }, [API, pisoEfectivo, reservaRender]);
 
   const cargarPlano = async () => {  
