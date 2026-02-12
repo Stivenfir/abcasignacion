@@ -1,4 +1,4 @@
-// client/src/pages/components/puestos/PuestoModal.jsx  
+// client/src/pages/components/puestos/PuestoModal.jsx
 import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 
@@ -13,35 +13,156 @@ export default function PuestoModal({
   const [planoUrl, setPlanoUrl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [modoCreacion, setModoCreacion] = useState('con-mapeo');
+  const [modoCreacion, setModoCreacion] = useState("con-mapeo");
   const [puntoSeleccionado, setPuntoSeleccionado] = useState(null);
   const [formData, setFormData] = useState({
-    noPuesto: puestoAEditar?.NoPuesto || '',
-    disponible: puestoAEditar?.Disponible || 'SI',
-    idClasificacion: puestoAEditar?.IDClasificacionPuesto || '',
+    noPuesto: puestoAEditar?.NoPuesto || "",
+    disponible: puestoAEditar?.Disponible || "SI",
+    idClasificacion: puestoAEditar?.IDClasificacionPuesto || "",
   });
 
   const canvasRef = useRef(null);
   const imagenRef = useRef(null);
   const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
+  const [mostrarGrilla, setMostrarGrilla] = useState(true);
+  const [delimitaciones, setDelimitaciones] = useState([]);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [puestosExistentes, setPuestosExistentes] = useState([]);
+  const containerRef = useRef(null);
 
-  // Cargar plano al montar  
+  // Cargar plano al montar
   useEffect(() => {
     cargarPlano();
   }, [pisoSeleccionado]);
 
-  // Pre-cargar punto si estamos editando  
+  // Pre-cargar punto si estamos editando
   useEffect(() => {
-    if (puestoAEditar && puestoAEditar.UbicacionX !== null && puestoAEditar.UbicacionY !== null) {
+    if (
+      puestoAEditar &&
+      puestoAEditar.UbicacionX !== null &&
+      puestoAEditar.UbicacionY !== null
+    ) {
       setPuntoSeleccionado({
         x: Number(puestoAEditar.UbicacionX),
-        y: Number(puestoAEditar.UbicacionY)
+        y: Number(puestoAEditar.UbicacionY),
       });
-      setModoCreacion('con-mapeo');
+      setModoCreacion("con-mapeo");
     }
   }, [puestoAEditar]);
 
-  // Dibujar punto cuando cambia  
+  // Cargar delimitaciones del área
+  useEffect(() => {
+    const cargarDelimitaciones = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(
+          `${API}/api/areas/piso/${areaSeleccionada.IdAreaPiso}/delimitaciones`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        const data = await res.json();
+        setDelimitaciones(data);
+
+        if (canvasRef.current && puntoSeleccionado) {
+          dibujarPunto();
+        }
+      } catch (error) {
+        console.error("Error al cargar delimitaciones:", error);
+      }
+    };
+
+    if (areaSeleccionada) cargarDelimitaciones();
+  }, [areaSeleccionada]);
+
+  // Cargar puestos existentes del área
+  useEffect(() => {
+    const cargarPuestosArea = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(
+          `${API}/api/puestos/area/${areaSeleccionada.IdAreaPiso}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        const data = await res.json();
+
+        // Filtrar el puesto actual si estamos editando
+        const puestosFiltrados = puestoAEditar
+          ? data.filter(
+              (p) => p.IdPuestoTrabajo !== puestoAEditar.IdPuestoTrabajo,
+            )
+          : data;
+
+        setPuestosExistentes(puestosFiltrados);
+      } catch (error) {
+        console.error("Error al cargar puestos:", error);
+      }
+    };
+
+    if (areaSeleccionada && modoCreacion === "con-mapeo") {
+      cargarPuestosArea();
+    }
+  }, [areaSeleccionada, modoCreacion]);
+
+  // ✅ NUEVO: Dibujar delimitaciones y puestos cuando se cargan
+  useEffect(() => {
+    if (
+      canvasRef.current &&
+      planoUrl &&
+      delimitaciones.length > 0 &&
+      modoCreacion === "con-mapeo"
+    ) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext("2d");
+
+      // Limpiar canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Dibujar grilla
+      dibujarGrilla();
+
+      // Dibujar delimitaciones
+      dibujarDelimitaciones();
+
+      // Dibujar puestos existentes
+      puestosExistentes.forEach((p) => {
+        if (p.UbicacionX && p.UbicacionY) {
+          ctx.beginPath();
+          ctx.arc(
+            Number(p.UbicacionX),
+            Number(p.UbicacionY),
+            8,
+            0,
+            2 * Math.PI,
+          );
+          ctx.fillStyle = "#9CA3AF";
+          ctx.fill();
+          ctx.strokeStyle = "#6B7280";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          ctx.fillStyle = "#FFFFFF";
+          ctx.font = "bold 10px Arial";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(p.NoPuesto, Number(p.UbicacionX), Number(p.UbicacionY));
+        }
+      });
+    }
+  }, [
+    delimitaciones,
+    puestosExistentes,
+    planoUrl,
+    modoCreacion,
+    mostrarGrilla,
+  ]);
+
+  // Redibujar cuando cambia mostrarGrilla
+  useEffect(() => {
+    if (puntoSeleccionado && canvasRef.current) {
+      dibujarPunto();
+    }
+  }, [mostrarGrilla]);
+
+  // Dibujar punto cuando cambia
   useEffect(() => {
     if (puntoSeleccionado && canvasRef.current) {
       dibujarPunto();
@@ -50,46 +171,114 @@ export default function PuestoModal({
 
   const cargarPlano = async () => {
     if (!pisoSeleccionado?.IDPiso) {
-      setError('No se ha seleccionado un piso válido');
+      setError("No se ha seleccionado un piso válido");
       setLoading(false);
       return;
     }
 
     try {
       setLoading(true);
-      const res = await fetch(`${API}/api/pisos/plano/${pisoSeleccionado.IDPiso}`);
+      const res = await fetch(
+        `${API}/api/pisos/plano/${pisoSeleccionado.IDPiso}`,
+      );
       const data = await res.json();
 
       if (data.success) {
         setPlanoUrl(`${API}${data.ruta}`);
         setError(null);
       } else {
-        throw new Error('No se encontró el plano');
+        throw new Error("No se encontró el plano");
       }
     } catch (error) {
       console.error("Error al cargar plano:", error);
-      setError('No se pudo cargar el plano del piso');
+      setError("No se pudo cargar el plano del piso");
     } finally {
       setLoading(false);
     }
   };
 
-const handleCanvasClick = (e) => {  
-  if (!canvasRef.current || modoCreacion === 'sin-mapeo') return;  
-  
-  const canvas = canvasRef.current;  
-  const rect = canvas.getBoundingClientRect();  
-    
-  // ✅ Calcular escala entre tamaño visual y tamaño real del canvas  
-  const scaleX = canvas.width / rect.width;  
-  const scaleY = canvas.height / rect.height;  
-    
-  // ✅ Coordenadas normalizadas al espacio del canvas real  
-  const x = Math.round((e.clientX - rect.left) * scaleX);  
-  const y = Math.round((e.clientY - rect.top) * scaleY);  
-  
-  setPuntoSeleccionado({ x, y });  
-};
+  const handleCanvasClick = (e) => {
+    if (!canvasRef.current || modoCreacion === "sin-mapeo") return;
+
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = Math.round((e.clientX - rect.left) * scaleX);
+    const y = Math.round((e.clientY - rect.top) * scaleY);
+
+    // Validar que esté dentro del área delimitada
+    const dentroDeArea = delimitaciones.some(
+      (d) =>
+        x >= Number(d.PosicionX) &&
+        x <= Number(d.PosicionX) + Number(d.Ancho) &&
+        y >= Number(d.PosicionY) &&
+        y <= Number(d.PosicionY) + Number(d.Alto),
+    );
+
+    if (!dentroDeArea && delimitaciones.length > 0) {
+      alert(
+        "⚠️ Debes seleccionar un punto dentro del área delimitada (zona azul)",
+      );
+      return;
+    }
+
+    setPuntoSeleccionado({ x, y });
+  };
+
+  const dibujarGrilla = () => {
+    if (!canvasRef.current || !mostrarGrilla) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const gridSize = 20;
+
+    ctx.strokeStyle = "#E5E7EB";
+    ctx.lineWidth = 0.5;
+
+    for (let x = 0; x < canvas.width; x += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, canvas.height);
+      ctx.stroke();
+    }
+
+    for (let y = 0; y < canvas.height; y += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(canvas.width, y);
+      ctx.stroke();
+    }
+  };
+
+  const dibujarDelimitaciones = () => {
+    if (!canvasRef.current || delimitaciones.length === 0) return;
+
+    const ctx = canvasRef.current.getContext("2d");
+
+    delimitaciones.forEach((d) => {
+      ctx.strokeStyle = "#3B82F6";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.fillStyle = "rgba(59, 130, 246, 0.1)";
+
+      ctx.fillRect(
+        Number(d.PosicionX),
+        Number(d.PosicionY),
+        Number(d.Ancho),
+        Number(d.Alto),
+      );
+
+      ctx.strokeRect(
+        Number(d.PosicionX),
+        Number(d.PosicionY),
+        Number(d.Ancho),
+        Number(d.Alto),
+      );
+
+      ctx.setLineDash([]);
+    });
+  };
 
   const dibujarPunto = () => {
     if (!canvasRef.current || !puntoSeleccionado) return;
@@ -98,7 +287,32 @@ const handleCanvasClick = (e) => {
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Dibujar círculo  
+    // 1️⃣ Dibujar grilla
+    dibujarGrilla();
+
+    // 2️⃣ Dibujar delimitaciones
+    dibujarDelimitaciones();
+
+    // 3️⃣ Dibujar puestos existentes
+    puestosExistentes.forEach((p) => {
+      if (p.UbicacionX && p.UbicacionY) {
+        ctx.beginPath();
+        ctx.arc(Number(p.UbicacionX), Number(p.UbicacionY), 8, 0, 2 * Math.PI);
+        ctx.fillStyle = "#9CA3AF";
+        ctx.fill();
+        ctx.strokeStyle = "#6B7280";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = "bold 10px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(p.NoPuesto, Number(p.UbicacionX), Number(p.UbicacionY));
+      }
+    });
+
+    // 4️⃣ Dibujar punto actual
     ctx.beginPath();
     ctx.arc(puntoSeleccionado.x, puntoSeleccionado.y, 15, 0, 2 * Math.PI);
     ctx.fillStyle = "rgba(59, 130, 246, 0.3)";
@@ -107,16 +321,19 @@ const handleCanvasClick = (e) => {
     ctx.lineWidth = 3;
     ctx.stroke();
 
-    // Dibujar número del puesto  
     ctx.fillStyle = "#1E40AF";
     ctx.font = "bold 14px Arial";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(formData.noPuesto || "?", puntoSeleccionado.x, puntoSeleccionado.y);
+    ctx.fillText(
+      formData.noPuesto || "?",
+      puntoSeleccionado.x,
+      puntoSeleccionado.y,
+    );
   };
 
   const handleGuardar = async () => {
-    // Validaciones  
+    // Validaciones
     if (!formData.noPuesto) {
       alert("Por favor ingresa el número del puesto");
       return;
@@ -127,23 +344,29 @@ const handleCanvasClick = (e) => {
       return;
     }
 
-    if (modoCreacion === 'con-mapeo' && !puntoSeleccionado) {
+    if (modoCreacion === "con-mapeo" && !puntoSeleccionado) {
       alert("Por favor selecciona una ubicación en el plano");
       return;
     }
 
-    // Preparar datos  
+    // Preparar datos
     const datosGuardar = {
       idAreaPiso: areaSeleccionada.IdAreaPiso,
       noPuesto: formData.noPuesto,
       disponible: formData.disponible,
       idClasificacion: formData.idClasificacion,
-      ubicacionX: modoCreacion === 'con-mapeo' && puntoSeleccionado ? puntoSeleccionado.x : null,
-      ubicacionY: modoCreacion === 'con-mapeo' && puntoSeleccionado ? puntoSeleccionado.y : null,
-      tieneMapeo: modoCreacion === 'con-mapeo' && puntoSeleccionado ? 1 : 0
+      ubicacionX:
+        modoCreacion === "con-mapeo" && puntoSeleccionado
+          ? puntoSeleccionado.x
+          : null,
+      ubicacionY:
+        modoCreacion === "con-mapeo" && puntoSeleccionado
+          ? puntoSeleccionado.y
+          : null,
+      tieneMapeo: modoCreacion === "con-mapeo" && puntoSeleccionado ? 1 : 0,
     };
 
-    // ✅ Si estamos editando, pasar el ID como segundo parámetro  
+    // ✅ Si estamos editando, pasar el ID como segundo parámetro
     if (puestoAEditar) {
       await onGuardar(datosGuardar, puestoAEditar.IdPuestoTrabajo);
     } else {
@@ -151,6 +374,38 @@ const handleCanvasClick = (e) => {
     }
 
     onClose();
+  };
+
+  // Auto-generar número de puesto al crear uno nuevo
+  useEffect(() => {
+    if (!puestoAEditar && areaSeleccionada) {
+      calcularSiguienteNumeroPuesto();
+    }
+  }, [areaSeleccionada, puestoAEditar]);
+
+  const calcularSiguienteNumeroPuesto = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(
+        `${API}/api/puestos/area/${areaSeleccionada.IdAreaPiso}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const puestos = await res.json();
+
+      // Encontrar el número más alto y sumar 1
+      const maxNoPuesto =
+        puestos.length > 0
+          ? Math.max(...puestos.map((p) => Number(p.NoPuesto) || 0))
+          : 0;
+
+      setFormData((prev) => ({
+        ...prev,
+        noPuesto: String(maxNoPuesto + 1),
+      }));
+    } catch (error) {
+      console.error("Error al calcular siguiente número:", error);
+      setFormData((prev) => ({ ...prev, noPuesto: "1" }));
+    }
   };
 
   return (
@@ -177,7 +432,9 @@ const handleCanvasClick = (e) => {
                 {puestoAEditar ? "✏️ Editar Puesto" : "✨ Crear Nuevo Puesto"}
               </h3>
               <p className="text-sm text-gray-600 mt-1">
-                Piso {pisoSeleccionado?.NumeroPiso} • {areaSeleccionada?.NombreArea || `Área ${areaSeleccionada?.IdArea}`}
+                Piso {pisoSeleccionado?.NumeroPiso} •{" "}
+                {areaSeleccionada?.NombreArea ||
+                  `Área ${areaSeleccionada?.IdArea}`}
               </p>
             </div>
             <button
@@ -198,13 +455,21 @@ const handleCanvasClick = (e) => {
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Número de Puesto *
               </label>
-              <input
-                type="number"
-                value={formData.noPuesto}
-                onChange={(e) => setFormData({ ...formData, noPuesto: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                placeholder="Ej: 1, 2, 3..."
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  value={formData.noPuesto}
+                  readOnly
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl bg-gray-50 text-gray-700 cursor-not-allowed"
+                  placeholder="Auto-generado..."
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                  🔒 Auto
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                El número se asigna automáticamente
+              </p>
             </div>
 
             {/* Disponibilidad */}
@@ -214,7 +479,9 @@ const handleCanvasClick = (e) => {
               </label>
               <select
                 value={formData.disponible}
-                onChange={(e) => setFormData({ ...formData, disponible: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, disponible: e.target.value })
+                }
                 className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
               >
                 <option value="SI">✅ Disponible</option>
@@ -229,7 +496,9 @@ const handleCanvasClick = (e) => {
               </label>
               <select
                 value={formData.idClasificacion}
-                onChange={(e) => setFormData({ ...formData, idClasificacion: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, idClasificacion: e.target.value })
+                }
                 className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
               >
                 <option value="">Selecciona una clasificación...</option>
@@ -250,36 +519,42 @@ const handleCanvasClick = (e) => {
               </label>
               <div className="grid grid-cols-2 gap-4">
                 <button
-                  onClick={() => setModoCreacion('con-mapeo')}
-                  className={`p-4 rounded-xl border-2 transition ${modoCreacion === 'con-mapeo'
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-300 hover:border-gray-400'
-                    }`}
+                  onClick={() => setModoCreacion("con-mapeo")}
+                  className={`p-4 rounded-xl border-2 transition ${
+                    modoCreacion === "con-mapeo"
+                      ? "border-blue-500 bg-blue-50 text-blue-700"
+                      : "border-gray-300 hover:border-gray-400"
+                  }`}
                 >
                   <div className="text-2xl mb-2">📍</div>
                   <div className="font-semibold">Con Mapeo</div>
-                  <div className="text-xs text-gray-600 mt-1">Asignar ubicación ahora</div>
+                  <div className="text-xs text-gray-600 mt-1">
+                    Asignar ubicación ahora
+                  </div>
                 </button>
                 <button
                   onClick={() => {
-                    setModoCreacion('sin-mapeo');
+                    setModoCreacion("sin-mapeo");
                     setPuntoSeleccionado(null);
                   }}
-                  className={`p-4 rounded-xl border-2 transition ${modoCreacion === 'sin-mapeo'
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-300 hover:border-gray-400'
-                    }`}
+                  className={`p-4 rounded-xl border-2 transition ${
+                    modoCreacion === "sin-mapeo"
+                      ? "border-blue-500 bg-blue-50 text-blue-700"
+                      : "border-gray-300 hover:border-gray-400"
+                  }`}
                 >
                   <div className="text-2xl mb-2">⏭️</div>
                   <div className="font-semibold">Sin Mapeo</div>
-                  <div className="text-xs text-gray-600 mt-1">Mapear después</div>
+                  <div className="text-xs text-gray-600 mt-1">
+                    Mapear después
+                  </div>
                 </button>
               </div>
             </div>
           )}
 
           {/* Plano interactivo */}
-          {modoCreacion === 'con-mapeo' && (
+          {modoCreacion === "con-mapeo" && (
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-3">
                 Ubicación en el Plano
@@ -307,11 +582,13 @@ const handleCanvasClick = (e) => {
                 <div>
                   <div className="mb-3 p-4 bg-blue-50 border border-blue-200 rounded-xl">
                     <p className="text-sm text-blue-800">
-                      💡 Haz clic en el plano para seleccionar la ubicación del puesto
+                      💡 Haz clic en el plano para seleccionar la ubicación del
+                      puesto
                     </p>
                     {puntoSeleccionado && (
                       <p className="text-sm text-gray-700 mt-2">
-                        📐 Coordenadas: ({Math.round(puntoSeleccionado.x)}, {Math.round(puntoSeleccionado.y)})
+                        📐 Coordenadas: ({Math.round(puntoSeleccionado.x)},{" "}
+                        {Math.round(puntoSeleccionado.y)})
                       </p>
                     )}
                   </div>
@@ -323,14 +600,95 @@ const handleCanvasClick = (e) => {
                       alt="Plano del piso"
                       className="max-w-full h-auto"
                       onLoad={(e) => {
+                        console.log("🔵 PUESTO MODAL - onLoad EJECUTADO");
+                        console.log(
+                          "🔵 PUESTO MODAL - canvasRef.current:",
+                          canvasRef.current,
+                        );
+                        console.log("🔵 PUESTO MODAL - e.target:", e.target);
+
                         if (canvasRef.current) {
-                          canvasRef.current.width = e.target.width;
-                          canvasRef.current.height = e.target.height;
-                          if (puntoSeleccionado) dibujarPunto();
+                          console.log(
+                            "🔵 PUESTO MODAL - Dimensiones:",
+                            e.target.naturalWidth,
+                            e.target.naturalHeight,
+                          );
+                          console.log("🔵 PUESTO MODAL - URL:", planoUrl);
+                          console.log(
+                            "🔵 PUESTO MODAL - Dimensiones renderizadas (width/height):",
+                            e.target.width,
+                            e.target.height,
+                          );
+
+                          canvasRef.current.width = e.target.naturalWidth;
+                          canvasRef.current.height = e.target.naturalHeight;
+
+                          // ✅ AGREGAR: Dibujar inmediatamente si hay delimitaciones
+                          if (delimitaciones.length > 0) {
+                            const ctx = canvasRef.current.getContext("2d");
+                            ctx.clearRect(
+                              0,
+                              0,
+                              canvasRef.current.width,
+                              canvasRef.current.height,
+                            );
+                            dibujarGrilla();
+                            dibujarDelimitaciones();
+
+                            // Dibujar puestos existentes
+                            puestosExistentes.forEach((p) => {
+                              if (p.UbicacionX && p.UbicacionY) {
+                                console.log(
+                                  "🔵 PUESTO MODAL - Dibujando puesto existente:",
+                                  p.NoPuesto,
+                                  "en",
+                                  p.UbicacionX,
+                                  p.UbicacionY,
+                                );
+                                ctx.beginPath();
+                                ctx.arc(
+                                  Number(p.UbicacionX),
+                                  Number(p.UbicacionY),
+                                  8,
+                                  0,
+                                  2 * Math.PI,
+                                );
+                                ctx.fillStyle = "#9CA3AF";
+                                ctx.fill();
+                                ctx.strokeStyle = "#6B7280";
+                                ctx.lineWidth = 2;
+                                ctx.stroke();
+
+                                ctx.fillStyle = "#FFFFFF";
+                                ctx.font = "bold 10px Arial";
+                                ctx.textAlign = "center";
+                                ctx.textBaseline = "middle";
+                                ctx.fillText(
+                                  p.NoPuesto,
+                                  Number(p.UbicacionX),
+                                  Number(p.UbicacionY),
+                                );
+                              }
+                            });
+                          }
+
+                          // Si hay punto seleccionado (modo edición), dibujarlo
+                          if (puntoSeleccionado) {
+                            console.log(
+                              "🔵 PUESTO MODAL - Dibujando punto seleccionado:",
+                              puntoSeleccionado,
+                            );
+                            dibujarPunto();
+                          }
+                        } else {
+                          console.log(
+                            "❌ PUESTO MODAL - canvasRef.current es NULL",
+                          );
                         }
                       }}
                     />
-                    <canvas ref={canvasRef}
+                    <canvas
+                      ref={canvasRef}
                       className="absolute top-0 left-0 cursor-crosshair"
                       onClick={handleCanvasClick}
                     />
@@ -347,7 +705,11 @@ const handleCanvasClick = (e) => {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={handleGuardar}
-            disabled={!formData.noPuesto || !formData.idClasificacion || (modoCreacion === 'con-mapeo' && !puntoSeleccionado)}
+            disabled={
+              !formData.noPuesto ||
+              !formData.idClasificacion ||
+              (modoCreacion === "con-mapeo" && !puntoSeleccionado)
+            }
             className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-blue-600 disabled:hover:to-indigo-600"
           >
             {puestoAEditar ? "💾 Actualizar Puesto" : "✨ Crear Puesto"}
