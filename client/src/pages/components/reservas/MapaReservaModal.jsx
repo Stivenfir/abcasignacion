@@ -424,8 +424,24 @@ export default function MapaReservaModal({
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const delimitacionesValidas = (Array.isArray(delimitacionesArea) ? delimitacionesArea : [])
-      .map((d) => toDisplayRect(d, metrics))
-      .filter((d) => d && [d.x, d.y, d.w, d.h].every(Number.isFinite));
+      .map((d) => {
+        const rectDisplay = toDisplayRect(d, metrics);
+        const rawX = Number(d?.PosicionX);
+        const rawY = Number(d?.PosicionY);
+        const rawW = Number(d?.Ancho);
+        const rawH = Number(d?.Alto);
+
+        if (!rectDisplay || ![rawX, rawY, rawW, rawH].every(Number.isFinite)) return null;
+
+        return {
+          ...rectDisplay,
+          rawX,
+          rawY,
+          rawW,
+          rawH,
+        };
+      })
+      .filter((d) => d && [d.x, d.y, d.w, d.h, d.rawX, d.rawY, d.rawW, d.rawH].every(Number.isFinite));
 
     const puntoBasePreview = coords.hasCoords ? toDisplayPoint(coords.x, coords.y, metrics) : null;
     const delimitacionesParaDibujar = (() => {
@@ -474,6 +490,22 @@ export default function MapaReservaModal({
       x: (coords.x * metrics.displayWidth) / metrics.naturalWidth,
       y: (coords.y * metrics.displayHeight) / metrics.naturalHeight,
       tipo: "natural-a-display",
+    });
+
+    // 3) Coordenadas relativas a la delimitación que contiene el punto original.
+    // Esto corrige desfases cuando el mapeo fue guardado con otro tamaño de visualización.
+    delimitacionesParaDibujar.forEach((d) => {
+      const dentroRaw = coords.x >= d.rawX && coords.x <= d.rawX + d.rawW && coords.y >= d.rawY && coords.y <= d.rawY + d.rawH;
+      if (!dentroRaw || d.rawW <= 0 || d.rawH <= 0 || d.w <= 0 || d.h <= 0) return;
+
+      const relX = (coords.x - d.rawX) / d.rawW;
+      const relY = (coords.y - d.rawY) / d.rawH;
+
+      candidatos.push({
+        x: d.x + relX * d.w,
+        y: d.y + relY * d.h,
+        tipo: "relativo-delimitacion",
+      });
     });
 
     const puntaje = (pt) => {
