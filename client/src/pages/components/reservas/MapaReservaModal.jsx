@@ -190,12 +190,16 @@ export default function MapaReservaModal({
         const areas = await resAreas.json();
         const listado = Array.isArray(areas) ? areas : [];
 
+        // Priorizar IdAreaPiso (más específico) para no tomar un área equivocada
+        // cuando existen varias áreas con el mismo IdArea en distintos pisos/secciones.
+        const idAreaPisoReserva = reservaRender?.IdAreaPiso;
+
         const areaEncontrada = listado.find((a) => {
+          if (idAreaPisoReserva != null) {
+            return String(a?.IdAreaPiso) === String(idAreaPisoReserva);
+          }
           if (Number.isFinite(areaIdObjetivo) && areaIdObjetivo > 0) {
             return Number(a?.IdArea) === areaIdObjetivo;
-          }
-          if (reservaRender?.IdAreaPiso != null) {
-            return String(a?.IdAreaPiso) === String(reservaRender?.IdAreaPiso);
           }
           return false;
         });
