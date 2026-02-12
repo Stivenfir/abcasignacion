@@ -7,6 +7,7 @@ import ReservasSidebar from "./components/reservas/ReservasSidebar";
 import ReservasPanel from "./components/reservas/ReservasPanel";
 import ConfirmacionReservaModal from "./components/reservas/ConfirmacionReservaModal";
 import VisualizarPuestoModal from "./components/reservas/VisualizarPuestoModal";
+import MapaReservaModal from "./components/reservas/MapaReservaModal";
 import AyudaReservas from "./components/reservas/AyudaReservas";
 
 export default function MisReservas() {
@@ -17,6 +18,8 @@ export default function MisReservas() {
   const [modalConfirmacion, setModalConfirmacion] = useState(false);
   const [reservaPendiente, setReservaPendiente] = useState(null);
   const [modalVisualizacion, setModalVisualizacion] = useState(false);
+  const [modalMapaReserva, setModalMapaReserva] = useState(false);
+  const [reservaMapaSeleccionada, setReservaMapaSeleccionada] = useState(null);
 
   const reservasActivas = reservasData.reservas.filter((r) => r.ReservaActiva).length;
 
@@ -132,8 +135,24 @@ export default function MisReservas() {
   };
 
 
-  const handleVerMapaReserva = () => {
-    navigate("/mapa");
+  const handleVerMapaReserva = (reserva) => {
+    if (!reserva) return;
+
+    const pisoReserva = reservasData.pisos.find((piso) => {
+      if (reserva.IdPiso != null) {
+        return String(piso.IDPiso) === String(reserva.IdPiso);
+      }
+      if (reserva.NumeroPiso != null) {
+        return String(piso.NumeroPiso) === String(reserva.NumeroPiso);
+      }
+      return false;
+    }) || reservasData.pisoSeleccionado;
+
+    setReservaMapaSeleccionada({
+      ...reserva,
+      __pisoSeleccionado: pisoReserva,
+    });
+    setModalMapaReserva(true);
   };
 
 
@@ -268,6 +287,24 @@ export default function MisReservas() {
           onClose={() => setModalVisualizacion(false)}
         />
       )}
+
+      {modalMapaReserva && reservaMapaSeleccionada && (
+        <MapaReservaModal
+          reserva={reservaMapaSeleccionada}
+          pisoSeleccionado={
+            reservaMapaSeleccionada.__pisoSeleccionado || reservasData.pisoSeleccionado
+          }
+          areaAsignada={{
+            NombreArea: reservaMapaSeleccionada.NombreArea || "Área asignada",
+            IdArea: reservaMapaSeleccionada.IdArea || null,
+          }}
+          onClose={() => {
+            setModalMapaReserva(false);
+            setReservaMapaSeleccionada(null);
+          }}
+        />
+      )}
+
     </div>
   );
 }

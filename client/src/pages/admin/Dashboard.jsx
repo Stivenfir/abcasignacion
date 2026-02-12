@@ -145,6 +145,48 @@ export default function Dashboard() {
           </motion.div>
         ))}
       </motion.div>
+
+
+      <motion.div
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.35, duration: 0.35 }}
+        className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm"
+      >
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+          <div>
+            <h3 className="text-xl font-bold text-gray-900">Flujo recomendado</h3>
+            <p className="text-sm text-gray-600">
+              Sigue este recorrido para una operación más rápida y ordenada.
+            </p>
+          </div>
+          <Link
+            to="/mis-reservas"
+            className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition"
+          >
+            Ir a Mis Reservas
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {[
+            { paso: "1", titulo: "Verifica el mapa", texto: "Confirma pisos y áreas con cupo disponible." },
+            { paso: "2", titulo: "Gestiona áreas", texto: "Mantén delimitaciones y configuración por piso al día." },
+            { paso: "3", titulo: "Monitorea reservas", texto: "Revisa reservas activas y estado de los escritorios." },
+          ].map((item) => (
+            <div
+              key={item.paso}
+              className="rounded-xl border border-gray-200 p-4 bg-gradient-to-br from-gray-50 to-white"
+            >
+              <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 text-sm font-semibold flex items-center justify-center mb-2">
+                {item.paso}
+              </div>
+              <p className="font-semibold text-gray-900">{item.titulo}</p>
+              <p className="text-xs text-gray-600 mt-1">{item.texto}</p>
+            </div>
+          ))}
+        </div>
+      </motion.div>
     </div>
   );
 }

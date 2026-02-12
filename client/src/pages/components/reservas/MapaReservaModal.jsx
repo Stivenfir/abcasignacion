@@ -35,7 +35,12 @@ export default function MapaReservaModal({
   };  
   
   const dibujarPuestoAsignado = () => {  
-    if (!canvasRef.current || !reserva?.UbicacionX || !reserva?.UbicacionY) return;  
+    if (
+      !canvasRef.current ||
+      reserva?.UbicacionX == null ||
+      reserva?.UbicacionY == null
+    )
+      return;  
   
     const canvas = canvasRef.current;  
     const ctx = canvas.getContext("2d");  
@@ -117,26 +122,37 @@ export default function MapaReservaModal({
             <div className="flex justify-center py-16">  
               <div className="w-16 h-16 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>  
             </div>  
+          ) : !planoUrl ? (
+            <div className="p-4 rounded-xl bg-yellow-50 border border-yellow-200 text-yellow-800">
+              No se encontró plano para este piso.
+            </div>
           ) : (  
-            <div className="relative inline-block border-2 border-gray-300 rounded-lg overflow-hidden shadow-lg">  
-              <img  
-                ref={imagenRef}  
-                src={planoUrl}  
-                alt="Plano del piso"  
-                className="max-w-full h-auto block"  
-                onLoad={(e) => {  
-                  if (canvasRef.current) {  
-                    canvasRef.current.width = e.target.width;  
-                    canvasRef.current.height = e.target.height;  
-                    dibujarPuestoAsignado();  
-                  }  
-                }}  
-              />  
-              <canvas  
-                ref={canvasRef}  
-                className="absolute top-0 left-0 pointer-events-none"  
-              />  
-            </div>  
+            <div>
+              {reserva?.UbicacionX == null || reserva?.UbicacionY == null ? (
+                <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-sm">
+                  Este registro no tiene coordenadas guardadas, pero puedes ubicarte por piso y área.
+                </div>
+              ) : null}
+              <div className="relative inline-block border-2 border-gray-300 rounded-lg overflow-hidden shadow-lg">  
+                <img  
+                  ref={imagenRef}  
+                  src={planoUrl}  
+                  alt="Plano del piso"  
+                  className="max-w-full h-auto block"  
+                  onLoad={(e) => {  
+                    if (canvasRef.current) {  
+                      canvasRef.current.width = e.target.width;  
+                      canvasRef.current.height = e.target.height;  
+                      dibujarPuestoAsignado();  
+                    }  
+                  }}  
+                />  
+                <canvas  
+                  ref={canvasRef}  
+                  className="absolute top-0 left-0 pointer-events-none"  
+                />  
+              </div>
+            </div>
           )}  
         </div>  
   
