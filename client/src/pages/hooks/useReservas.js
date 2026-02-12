@@ -48,32 +48,46 @@ export function useReservas() {
         fetchConTimeout(`${API}/api/reservas/empleado`, { headers }),
       ]);
 
+      let pisosHabilitados = [];
+      let scope = "area";
+
       if (resPisos.status === "fulfilled" && resPisos.value.ok) {
         const dataPisos = await resPisos.value.json();
-        const pisosHabilitados = Array.isArray(dataPisos)
+        pisosHabilitados = Array.isArray(dataPisos)
           ? dataPisos
           : Array.isArray(dataPisos?.pisos)
             ? dataPisos.pisos
             : [];
 
-        const scope = ["global", "all-pisos"].includes(dataPisos?.scope)
+        scope = ["global", "all-pisos"].includes(dataPisos?.scope)
           ? dataPisos.scope
           : "area";
-
-        setPisos(pisosHabilitados);
-        setScopePisos(scope);
-
-        setPisoSeleccionado((prev) => {
-          if (!pisosHabilitados.length) return null;
-          if (prev && pisosHabilitados.some((p) => p.IDPiso === prev.IDPiso)) {
-            return prev;
-          }
-          return pisosHabilitados[0];
-        });
-      } else {
-        setPisos([]);
-        setScopePisos("area");
       }
+
+      // Fallback al comportamiento original: usar /api/pisos si el endpoint nuevo no trae datos
+      if (!pisosHabilitados.length) {
+        const resPisosOriginal = await fetchConTimeout(`${API}/api/pisos`);
+        if (resPisosOriginal.ok) {
+          const dataPisosOriginal = await resPisosOriginal.json();
+          pisosHabilitados = Array.isArray(dataPisosOriginal)
+            ? dataPisosOriginal
+            : [];
+          if (pisosHabilitados.length) {
+            scope = "all-pisos";
+          }
+        }
+      }
+
+      setPisos(pisosHabilitados);
+      setScopePisos(scope);
+
+      setPisoSeleccionado((prev) => {
+        if (!pisosHabilitados.length) return null;
+        if (prev && pisosHabilitados.some((p) => p.IDPiso === prev.IDPiso)) {
+          return prev;
+        }
+        return pisosHabilitados[0];
+      });
 
       if (resReservas.status === "fulfilled" && resReservas.value.ok) {
         const dataReservas = await resReservas.value.json();
