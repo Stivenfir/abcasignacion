@@ -19,6 +19,14 @@ async function GetData(P){
   });      
 }    
     
+
+function normalizarDisponible(valor) {
+  const texto = String(valor ?? "").trim().toUpperCase();
+  if (["SI", "SÍ", "1", "TRUE", "DISPONIBLE"].includes(texto)) return "SI";
+  if (["NO", "0", "FALSE", "NO DISPONIBLE"].includes(texto)) return "NO";
+  return "NO";
+}
+
 function logAuditoria(accion, usuario, detalles) {      
   const timestamp = new Date().toISOString();      
   const logEntry = { timestamp, accion, usuario, ...detalles };      
@@ -98,11 +106,12 @@ router.put("/:idPuesto", authenticateToken, async (req, res) => {
   const { idPuesto } = req.params;
   const { ubicacionX, ubicacionY, disponible, idClasificacion } = req.body;
   const usuario = req.user.email;
+  const disponibleNormalizado = normalizarDisponible(disponible);
 
 
 
   try {
-    const query = `EditABCDeskBooking=7,${idPuesto},${ubicacionX || 'NULL'},${ubicacionY || 'NULL'},0,${idClasificacion || 'NULL'},0,0,'${disponible}'`;
+    const query = `EditABCDeskBooking=7,${idPuesto},${ubicacionX || 'NULL'},${ubicacionY || 'NULL'},0,${idClasificacion || 'NULL'},0,0,'${disponibleNormalizado}'`;
 
 
 
