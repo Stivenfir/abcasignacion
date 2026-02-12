@@ -60,18 +60,15 @@ function syncCanvasWithImage(canvas, image) {
 
   const displayWidth = image.clientWidth || image.width || 0;
   const displayHeight = image.clientHeight || image.height || 0;
-  const naturalWidth = image.naturalWidth || displayWidth;
-  const naturalHeight = image.naturalHeight || displayHeight;
+  if (!displayWidth || !displayHeight) return null;
 
-  if (!displayWidth || !displayHeight || !naturalWidth || !naturalHeight) return null;
-
-  // Canvas en el mismo sistema visual que usa el usuario (display)
+  // Misma referencia que se usa al mapear puestos (coordenadas en display)
   canvas.width = displayWidth;
   canvas.height = displayHeight;
   canvas.style.width = `${displayWidth}px`;
   canvas.style.height = `${displayHeight}px`;
 
-  return { naturalWidth, naturalHeight, displayWidth, displayHeight };
+  return { displayWidth, displayHeight };
 }
   
 export default function MapaReservaModal({  
@@ -189,17 +186,11 @@ export default function MapaReservaModal({
     let x = coords.x;
     let y = coords.y;
 
-    // Soportar 3 sistemas: normalizado (0..1), display y natural
+    // Soporte solo para coordenadas display (mapeo actual) + normalizadas [0..1]
     const esNormalizado = x >= 0 && x <= 1 && y >= 0 && y <= 1;
     if (esNormalizado) {
       x = x * metrics.displayWidth;
       y = y * metrics.displayHeight;
-    } else {
-      const pareceNatural = x > metrics.displayWidth || y > metrics.displayHeight;
-      if (pareceNatural && metrics.naturalWidth && metrics.naturalHeight) {
-        x = (x * metrics.displayWidth) / metrics.naturalWidth;
-        y = (y * metrics.displayHeight) / metrics.naturalHeight;
-      }
     }
 
     x = Math.max(0, Math.min(metrics.displayWidth, x));
