@@ -81,6 +81,7 @@ export default function MapaReservaModal({
   const [planoUrl, setPlanoUrl] = useState(null);  
   const [loading, setLoading] = useState(true);  
   const [loadingUbicacion, setLoadingUbicacion] = useState(false);
+  const [delimitacionesArea, setDelimitacionesArea] = useState([]);
   const canvasRef = useRef(null);  
   const imagenRef = useRef(null);  
   const API = import.meta.env.VITE_API_URL || "http://localhost:3000";  
@@ -99,6 +100,11 @@ export default function MapaReservaModal({
     setPlanoUrl(null);
     setLoading(false);
   }, [pisoSeleccionado]);  
+
+
+  const areaIdObjetivo = Number(
+    reservaRender?.IdArea ?? reserva?.IdArea ?? areaAsignada?.IdArea,
+  );
 
   useEffect(() => {
     const resolverUbicacionReserva = async () => {
@@ -153,6 +159,71 @@ export default function MapaReservaModal({
     resolverUbicacionReserva();
   }, [API, pisoSeleccionado, reserva]);
   
+  useEffect(() => {
+    const cargarDelimitacionesArea = async () => {
+      if (!pisoSeleccionado?.IDPiso) {
+        setDelimitacionesArea([]);
+        return;
+      }
+
+      const token = localStorage.getItem("token");
+      if (!token) {
+        setDelimitacionesArea([]);
+        return;
+      }
+
+      try {
+        const resAreas = await fetch(`${API}/api/areas/piso/${pisoSeleccionado.IDPiso}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!resAreas.ok) {
+          setDelimitacionesArea([]);
+          return;
+        }
+
+        const areas = await resAreas.json();
+        const listado = Array.isArray(areas) ? areas : [];
+
+        const areaEncontrada = listado.find((a) => {
+          if (Number.isFinite(areaIdObjetivo) && areaIdObjetivo > 0) {
+            return Number(a?.IdArea) === areaIdObjetivo;
+          }
+          if (reservaRender?.IdAreaPiso != null) {
+            return String(a?.IdAreaPiso) === String(reservaRender?.IdAreaPiso);
+          }
+          return false;
+        });
+
+        if (!areaEncontrada?.IdAreaPiso) {
+          setDelimitacionesArea([]);
+          return;
+        }
+
+        const resDel = await fetch(
+          `${API}/api/areas/piso/${areaEncontrada.IdAreaPiso}/delimitaciones`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+
+        if (!resDel.ok) {
+          setDelimitacionesArea([]);
+          return;
+        }
+
+        const dataDel = await resDel.json();
+        setDelimitacionesArea(Array.isArray(dataDel) ? dataDel : []);
+
+        if (!areaAsignada?.NombreArea && areaEncontrada?.NombreArea) {
+          setReservaRender((prev) => ({ ...(prev || {}), NombreArea: areaEncontrada.NombreArea }));
+        }
+      } catch {
+        setDelimitacionesArea([]);
+      }
+    };
+
+    cargarDelimitacionesArea();
+  }, [API, pisoSeleccionado, areaIdObjetivo, reservaRender?.IdAreaPiso, areaAsignada?.NombreArea]);
+
   const cargarPlano = async () => {  
     try {  
       const res = await fetch(`${API}/api/pisos/plano/${pisoSeleccionado.IDPiso}`);  
@@ -181,6 +252,25 @@ export default function MapaReservaModal({
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    if (Array.isArray(delimitacionesArea) && delimitacionesArea.length) {
+      delimitacionesArea.forEach((d) => {
+        const dx = Number(d?.PosicionX);
+        const dy = Number(d?.PosicionY);
+        const dw = Number(d?.Ancho);
+        const dh = Number(d?.Alto);
+
+        if (![dx, dy, dw, dh].every(Number.isFinite)) return;
+
+        ctx.fillStyle = "rgba(251, 191, 36, 0.16)";
+        ctx.strokeStyle = "rgba(245, 158, 11, 0.95)";
+        ctx.lineWidth = 3;
+        ctx.setLineDash([10, 6]);
+        ctx.fillRect(dx, dy, dw, dh);
+        ctx.strokeRect(dx, dy, dw, dh);
+        ctx.setLineDash([]);
+      });
+    }
+
     if (!coords.hasCoords) return;
 
     let x = coords.x;
@@ -196,33 +286,46 @@ export default function MapaReservaModal({
     x = Math.max(0, Math.min(metrics.displayWidth, x));
     y = Math.max(0, Math.min(metrics.displayHeight, y));
 
-    // Dibujar círculo verde brillante para el puesto asignado
-    ctx.shadowColor = "rgba(16, 185, 129, 0.5)";
-    ctx.shadowBlur = 10;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 0;
+    // Marcador súper visible para que no se pierda en el plano
+    ctx.shadowColor = "rgba(220, 38, 38, 0.55)";
+    ctx.shadowBlur = 14;
 
     ctx.beginPath();
-    ctx.arc(x, y, 15, 0, 2 * Math.PI);
-    ctx.fillStyle = "#10B981";
+    ctx.arc(x, y, 20, 0, 2 * Math.PI);
+    ctx.strokeStyle = "rgba(220, 38, 38, 0.95)";
+    ctx.lineWidth = 5;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(x, y, 9, 0, 2 * Math.PI);
+    ctx.fillStyle = "#DC2626";
     ctx.fill();
 
     ctx.shadowColor = "transparent";
-    ctx.strokeStyle = "#059669";
-    ctx.lineWidth = 3;
-    ctx.stroke();
-
-    // Dibujar número del puesto
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 14px Arial";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(getReservaPuestoLabel(reservaRender) ?? "#", x, y);
-
-    // Dibujar pulso animado
     ctx.beginPath();
-    ctx.arc(x, y, 25, 0, 2 * Math.PI);
-    ctx.strokeStyle = "rgba(16, 185, 129, 0.3)";
+    ctx.arc(x, y, 4, 0, 2 * Math.PI);
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fill();
+
+    const etiqueta = `Puesto #${getReservaPuestoLabel(reservaRender) ?? "?"}`;
+    ctx.font = "bold 12px Arial";
+    const textW = ctx.measureText(etiqueta).width;
+    const boxW = textW + 14;
+    const boxH = 24;
+    const boxX = Math.max(4, Math.min(metrics.displayWidth - boxW - 4, x - boxW / 2));
+    const boxY = Math.max(4, y - 44);
+
+    ctx.fillStyle = "rgba(17, 24, 39, 0.92)";
+    ctx.fillRect(boxX, boxY, boxW, boxH);
+    ctx.fillStyle = "#FFFFFF";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(etiqueta, boxX + 7, boxY + boxH / 2);
+
+    ctx.beginPath();
+    ctx.moveTo(x, y - 10);
+    ctx.lineTo(x, boxY + boxH);
+    ctx.strokeStyle = "rgba(17, 24, 39, 0.92)";
     ctx.lineWidth = 2;
     ctx.stroke();
   };
@@ -231,7 +334,7 @@ export default function MapaReservaModal({
     if (planoUrl) {
       dibujarPuestoAsignado();
     }
-  }, [planoUrl, reservaRender]);
+  }, [planoUrl, reservaRender, delimitacionesArea]);
 
   useEffect(() => {
     if (!planoUrl) return;
@@ -239,7 +342,7 @@ export default function MapaReservaModal({
     const onResize = () => dibujarPuestoAsignado();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [planoUrl, reservaRender]);
+  }, [planoUrl, reservaRender, delimitacionesArea]);
   
   const coordsReserva = getReservaCoords(reservaRender);
   const puestoLabel = getReservaPuestoLabel(reservaRender) ?? "N/D";
@@ -263,7 +366,7 @@ export default function MapaReservaModal({
               ✅ Puesto Asignado  
             </h3>  
             <p className="text-sm text-gray-600 mt-1">  
-              {areaAsignada?.NombreArea || `Área ${areaAsignada?.IdArea || "N/D"}`} • Puesto #{puestoLabel}
+              {reservaRender?.NombreArea || areaAsignada?.NombreArea || `Área ${areaAsignada?.IdArea || "N/D"}`} • Puesto #{puestoLabel}
             </p>  
           </div>  
           <button  
@@ -319,7 +422,7 @@ export default function MapaReservaModal({
                 />  
                 <canvas  
                   ref={canvasRef}  
-                  className="absolute top-0 left-0 pointer-events-none"  
+                  className="absolute top-0 left-0 pointer-events-none z-10"  
                 />  
               </div>
             </div>
