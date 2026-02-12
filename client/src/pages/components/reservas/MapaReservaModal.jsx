@@ -429,7 +429,15 @@ export default function MapaReservaModal({
         puntoBasePreview.y <= d.y + d.h,
       );
 
-      return contenedoras.length ? contenedoras : delimitacionesValidas;
+      if (!contenedoras.length) return delimitacionesValidas;
+
+      // Si hay varias delimitaciones que contienen el punto, usar la más específica
+      // (área mínima) para evitar resaltar rectángulos macro que dan sensación de descuadre.
+      const masEspecifica = contenedoras
+        .map((d) => ({ ...d, area: d.w * d.h }))
+        .sort((a, b) => a.area - b.area)[0];
+
+      return masEspecifica ? [masEspecifica] : contenedoras;
     })();
 
     delimitacionesParaDibujar.forEach((d) => {
