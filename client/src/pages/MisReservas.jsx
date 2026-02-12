@@ -219,6 +219,7 @@ export default function MisReservas() {
         <AyudaReservas
           pisos={reservasData.pisos}
           onSeleccionarPiso={reservasData.setPisoSeleccionado}
+          scopePisos={reservasData.scopePisos}
         />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
