@@ -219,20 +219,40 @@ export function useReservas() {
     try {
       const token = localStorage.getItem("token");
 
-      const res = await fetch(`${API}/api/reservas/${idReserva}/cancelar`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          observacion: observacion || "Cancelada por el usuario",
-        }),
-      });
+      const enviarCancelacion = async (esEmergencia = false) => {
+        const res = await fetch(`${API}/api/reservas/${idReserva}/cancelar`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            observacion: observacion || (esEmergencia ? "Cancelación de emergencia" : "Cancelada por el usuario"),
+            emergencia: esEmergencia,
+          }),
+        });
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Error al cancelar reserva");
+        const data = await res.json().catch(() => ({}));
+        return { ok: res.ok, status: res.status, data };
+      };
+
+      let resultado = await enviarCancelacion(false);
+
+      if (!resultado.ok && resultado.data?.code === "CANCELACION_FUERA_DE_TIEMPO") {
+        const confirmarEmergencia = confirm(
+          "La cancelación normal requiere al menos 1 hora de anticipación. ¿Deseas cancelarla como emergencia?",
+        );
+
+        if (!confirmarEmergencia) {
+          setMensaje({ tipo: "error", texto: `✗ ${resultado.data?.error || "Cancelación fuera de tiempo"}` });
+          return false;
+        }
+
+        resultado = await enviarCancelacion(true);
+      }
+
+      if (!resultado.ok) {
+        throw new Error(resultado.data?.error || resultado.data?.message || "Error al cancelar reserva");
       }
 
       setMensaje({ tipo: "success", texto: "✓ Reserva cancelada" });
