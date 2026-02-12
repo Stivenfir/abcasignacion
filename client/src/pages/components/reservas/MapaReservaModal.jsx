@@ -103,7 +103,7 @@ export default function MapaReservaModal({
       if (!reserva) return;
 
       const coords = getReservaCoords(reserva);
-      if (coords.hasCoords || !pisoSeleccionado?.IDPiso) {
+      if (coords.hasCoords || !pisoSeleccionado?.IDPiso || reserva?.__pisoEstimado) {
         return;
       }
 
@@ -191,8 +191,8 @@ export default function MapaReservaModal({
       y = (y * metrics.displayHeight) / metrics.naturalHeight;
     }
 
-    x = Math.max(0, Math.min(metrics.displayWidth, x));
-    y = Math.max(0, Math.min(metrics.displayHeight, y));
+    const outOfBounds = x < 0 || y < 0 || x > metrics.displayWidth || y > metrics.displayHeight;
+    if (outOfBounds) return;
 
     // Dibujar círculo verde brillante para el puesto asignado
     ctx.shadowColor = "rgba(16, 185, 129, 0.5)";
@@ -285,6 +285,11 @@ export default function MapaReservaModal({
               Buscando coordenadas reales del puesto reservado...
             </div>
           )}
+          {reservaRender?.__pisoEstimado && (
+            <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+              Mostrando un piso estimado. Si el punto no coincide, esta reserva no trae piso exacto en el registro.
+            </div>
+          )}
   
           {loading ? (  
             <div className="flex justify-center py-16">  
@@ -298,7 +303,7 @@ export default function MapaReservaModal({
             <div>
               {!coordsReserva.hasCoords ? (
                 <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-sm">
-                  Este registro no tiene coordenadas guardadas, pero puedes ubicarte por piso y área.
+                  Este registro no trae coordenadas exactas para este piso en la reserva.
                 </div>
               ) : null}
               <div className="relative inline-block border-2 border-gray-300 rounded-lg overflow-hidden shadow-lg">  

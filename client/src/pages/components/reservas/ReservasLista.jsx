@@ -49,6 +49,27 @@ export default function ReservasLista({
     return estado === "activa";
   };
 
+
+  const formatearFechaReserva = (rawFecha) => {
+    if (!rawFecha) return "Fecha no disponible";
+
+    // Si ya viene YYYY-MM-DD, mantener compatibilidad actual
+    if (typeof rawFecha === "string" && /^\d{4}-\d{2}-\d{2}$/.test(rawFecha.trim())) {
+      return convertirYYYYMMDDaDDMMAAAA(rawFecha.trim());
+    }
+
+    const date = new Date(rawFecha);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toLocaleDateString("es-CO", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      });
+    }
+
+    return String(rawFecha);
+  };
+
   if (loadingReservas) {
     return (
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -131,7 +152,7 @@ export default function ReservasLista({
                 <div className="flex items-center gap-2 text-sm text-gray-700">
                   <span>📅</span>
                   <span className="font-medium">
-                    {convertirYYYYMMDDaDDMMAAAA(reserva.FechaReserva)}
+                    {formatearFechaReserva(reserva.FechaReserva)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-gray-600">

@@ -138,6 +138,8 @@ export default function MisReservas() {
   const handleVerMapaReserva = (reserva) => {
     if (!reserva) return;
 
+    const tienePisoEnReserva = reserva.IdPiso != null || reserva.NumeroPiso != null;
+
     const pisoReserva = reservasData.pisos.find((piso) => {
       if (reserva.IdPiso != null) {
         return String(piso.IDPiso) === String(reserva.IdPiso);
@@ -151,6 +153,7 @@ export default function MisReservas() {
     setReservaMapaSeleccionada({
       ...reserva,
       __pisoSeleccionado: pisoReserva,
+      __pisoEstimado: !tienePisoEnReserva,
     });
     setModalMapaReserva(true);
   };
