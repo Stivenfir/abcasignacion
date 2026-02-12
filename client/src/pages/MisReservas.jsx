@@ -177,7 +177,15 @@ export default function MisReservas() {
       {reservasData.pisos.length === 0 && (
         <div className="mx-6 mt-4 p-4 rounded-xl bg-yellow-50 border border-yellow-200 text-yellow-800">
           <p className="font-medium">
-            ⚠️ Tu área no tiene pisos habilitados para reservar. Contacta al administrador.
+            ⚠️ No se encontraron pisos con puestos disponibles para reservar.
+          </p>
+        </div>
+      )}
+
+      {reservasData.scopePisos === "global" && reservasData.pisos.length > 0 && (
+        <div className="mx-6 mt-4 p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-800">
+          <p className="font-medium">
+            ℹ️ No encontramos configuración por área en este momento, así que te mostramos pisos generales disponibles.
           </p>
         </div>
       )}
@@ -218,6 +226,7 @@ export default function MisReservas() {
             pisos={reservasData.pisos}
             pisoSeleccionado={reservasData.pisoSeleccionado}
             onSeleccionarPiso={reservasData.setPisoSeleccionado}
+            scopePisos={reservasData.scopePisos}
           />
 
           <ReservasPanel

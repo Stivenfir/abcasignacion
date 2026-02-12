@@ -4,6 +4,7 @@ export default function ReservasSidebar({
   pisos,
   pisoSeleccionado,
   onSeleccionarPiso,
+  scopePisos = "area",
 }) {
   if (!pisos.length) {
     return (
@@ -13,7 +14,7 @@ export default function ReservasSidebar({
             Pisos habilitados
           </h2>
           <div className="p-4 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm">
-            No hay pisos disponibles para tu área.
+            No hay pisos disponibles para reservar en este momento.
           </div>
         </div>
       </motion.div>
@@ -33,7 +34,9 @@ export default function ReservasSidebar({
           Pisos habilitados
         </h2>
         <p className="text-xs text-gray-500 mb-4">
-          Solo se muestran pisos de tu área para reservar automáticamente.
+          {scopePisos === "area"
+            ? "Solo se muestran pisos de tu área para reservar automáticamente."
+            : "Mostrando pisos generales mientras se parametriza la asignación por área."}
         </p>
 
         {Object.entries(pisosPorBodega).map(([bodega, pisosBodega], index) => (
@@ -63,7 +66,7 @@ export default function ReservasSidebar({
                   </div>
                   {piso.TotalPuestosArea != null && (
                     <div className="text-xs text-gray-500 mt-1">
-                      {piso.TotalPuestosArea} puestos de tu área
+                      {piso.TotalPuestosArea} puestos disponibles
                     </div>
                   )}
                 </motion.button>

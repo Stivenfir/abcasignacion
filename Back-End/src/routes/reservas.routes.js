@@ -33,6 +33,12 @@ function toSqlDateYYYYMMDD(value) {
   return `${y}${m}${d}`;
 }
 
+
+function normalizeAreaId(rawArea) {
+  const parsed = Number(rawArea);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 function logAuditoria(accion, usuario, detalles) {        
   const timestamp = new Date().toISOString();        
   const logEntry = { timestamp, accion, usuario, ...detalles };        
@@ -89,11 +95,12 @@ router.get("/empleado", authenticateToken, async (req, res) => {
 
 // GET - Obtener pisos habilitados para el área del usuario
 router.get("/pisos-habilitados", authenticateToken, async (req, res) => {
-  const idArea = req.user.idArea;
+  const idArea = normalizeAreaId(req.user.idArea);
   const usuario = req.user.username;
 
   try {
-    const query = `
+    const queryPorArea = idArea
+      ? `
       SELECT DISTINCT
         P.IDPiso,
         P.NumeroPiso,
@@ -105,24 +112,50 @@ router.get("/pisos-habilitados", authenticateToken, async (req, res) => {
       WHERE AP.IdArea = ${idArea}
       GROUP BY P.IDPiso, P.NumeroPiso, P.Bodega
       ORDER BY P.Bodega, P.NumeroPiso
-    `;
+    `
+      : null;
 
-    const Rta = await GetData(`ConsultaSQL=${encodeURIComponent(query)}`);
+    let pisos = [];
+    let scope = "area";
 
-    if (!Rta || Rta.trim().startsWith('Array') || Rta.trim().startsWith(':')) {
-      return res.json([]);
+    if (queryPorArea) {
+      const rtaArea = await GetData(`ConsultaSQL=${encodeURIComponent(queryPorArea)}`);
+      if (rtaArea && !rtaArea.trim().startsWith('Array') && !rtaArea.trim().startsWith(':')) {
+        const dataArea = JSON.parse(rtaArea.trim())["data"];
+        pisos = Array.isArray(dataArea) ? dataArea : [];
+      }
     }
 
-    const D = JSON.parse(Rta.trim())["data"];
-    const pisos = Array.isArray(D) ? D : [];
+    if (!pisos.length) {
+      const queryGlobal = `
+        SELECT DISTINCT
+          P.IDPiso,
+          P.NumeroPiso,
+          P.Bodega,
+          COUNT(PT.IdPuestoTrabajo) as TotalPuestosArea
+        FROM ABCDeskBooking.dbo.Piso P
+        INNER JOIN ABCDeskBooking.dbo.AreaPiso AP ON AP.IdPiso = P.IDPiso
+        INNER JOIN ABCDeskBooking.dbo.PuestoTrabajo PT ON PT.IdAreaPiso = AP.IdAreaPiso
+        GROUP BY P.IDPiso, P.NumeroPiso, P.Bodega
+        ORDER BY P.Bodega, P.NumeroPiso
+      `;
+
+      const rtaGlobal = await GetData(`ConsultaSQL=${encodeURIComponent(queryGlobal)}`);
+      if (rtaGlobal && !rtaGlobal.trim().startsWith('Array') && !rtaGlobal.trim().startsWith(':')) {
+        const dataGlobal = JSON.parse(rtaGlobal.trim())["data"];
+        pisos = Array.isArray(dataGlobal) ? dataGlobal : [];
+        scope = "global";
+      }
+    }
 
     logAuditoria('CONSULTAR_PISOS_HABILITADOS', usuario, {
       idArea,
+      scope,
       resultado: 'success',
       cantidad: pisos.length,
     });
 
-    return res.json(pisos);
+    return res.json({ pisos, scope });
   } catch (error) {
     console.error('Error al obtener pisos habilitados:', error);
     logAuditoria('CONSULTAR_PISOS_HABILITADOS', usuario, {
@@ -139,7 +172,7 @@ router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {
   const { fecha } = req.params;      
   const { idPiso } = req.query;      
   const usuario = req.user.username;  
-  const idArea = req.user.idArea;  // ✅ AGREGAR: Extraer idArea del token JWT  
+  const idArea = normalizeAreaId(req.user.idArea);  // ✅ AGREGAR: Extraer idArea del token JWT  
             
   try {  
     const fechaSql = toSqlDateYYYYMMDD(fecha);
@@ -148,7 +181,7 @@ router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {
     }
 
     // ✅ MODIFICAR: Pasar @IdArea al stored procedure  
-    var Rta = await GetData(`ConsultaReservas=@P%3D2,@Fecha%3D'${fechaSql}',@IdArea%3D${idArea}`);  
+    var Rta = await GetData(`ConsultaReservas=@P%3D2,@Fecha%3D'${fechaSql}'${idArea ? `,@IdArea%3D${idArea}` : ''}`);  
             
     if (!Rta || Rta.trim().startsWith('Array') || Rta.trim().startsWith(':')) {            
       console.error('Error de BD:', Rta);          
@@ -171,6 +204,16 @@ router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {
       return res.json([]);            
     }      
       
+    if (idArea && D.length === 0) {
+      const rtaGlobal = await GetData(`ConsultaReservas=@P%3D2,@Fecha%3D'${fechaSql}'`);
+      if (rtaGlobal && !rtaGlobal.trim().startsWith('Array') && !rtaGlobal.trim().startsWith(':')) {
+        const dataGlobal = JSON.parse(rtaGlobal.trim())["data"];
+        if (Array.isArray(dataGlobal)) {
+          D = dataGlobal;
+        }
+      }
+    }
+
     // ✅ Eliminar duplicados basándose en IdPuestoTrabajo    
     const puestosUnicos = [];    
     const idsVistos = new Set();    
