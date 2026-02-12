@@ -93,9 +93,7 @@ export default function ReservasLista({
           const textoPiso =
             reserva.NumeroPiso != null
               ? `Piso ${reserva.NumeroPiso}`
-              : pisoSeleccionado?.NumeroPiso != null
-                ? `Piso ${pisoSeleccionado.NumeroPiso} (estimado)`
-                : "Piso no identificado";
+              : "Piso no identificado";
 
           return (
             <motion.div

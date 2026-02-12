@@ -16,21 +16,19 @@ function getReservaCoords(raw) {
     "ubicacionX",
     "PosicionX",
     "posicionX",
-    "X",
-    "x",
   ]);
   const yRaw = pickFirst(raw, [
     "UbicacionY",
     "ubicacionY",
     "PosicionY",
     "posicionY",
-    "Y",
-    "y",
   ]);
 
   const x = Number(xRaw);
   const y = Number(yRaw);
-  const hasCoords = Number.isFinite(x) && Number.isFinite(y);
+  const coordsValidas = Number.isFinite(x) && Number.isFinite(y) && x >= 0 && y >= 0;
+  const esEsquinaPorDefecto = coordsValidas && x === 0 && y === 0;
+  const hasCoords = coordsValidas && !esEsquinaPorDefecto;
 
   return {
     hasCoords,
