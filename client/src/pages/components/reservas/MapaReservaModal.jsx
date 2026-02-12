@@ -65,8 +65,9 @@ function syncCanvasWithImage(canvas, image) {
 
   if (!displayWidth || !displayHeight || !naturalWidth || !naturalHeight) return null;
 
-  canvas.width = naturalWidth;
-  canvas.height = naturalHeight;
+  // Canvas en el mismo sistema visual que usa el usuario (display)
+  canvas.width = displayWidth;
+  canvas.height = displayHeight;
   canvas.style.width = `${displayWidth}px`;
   canvas.style.height = `${displayHeight}px`;
 
@@ -180,11 +181,18 @@ export default function MapaReservaModal({
 
     if (!coords.hasCoords) return;
 
-    const scaleX = metrics.naturalWidth / metrics.displayWidth;
-    const scaleY = metrics.naturalHeight / metrics.displayHeight;
+    let x = coords.x;
+    let y = coords.y;
 
-    const x = coords.x * scaleX;
-    const y = coords.y * scaleY;
+    // Soportar ambos sistemas: coordenada en display (mapeo) o en natural (imagen original)
+    const pareceNatural = x > metrics.displayWidth || y > metrics.displayHeight;
+    if (pareceNatural && metrics.naturalWidth && metrics.naturalHeight) {
+      x = (x * metrics.displayWidth) / metrics.naturalWidth;
+      y = (y * metrics.displayHeight) / metrics.naturalHeight;
+    }
+
+    x = Math.max(0, Math.min(metrics.displayWidth, x));
+    y = Math.max(0, Math.min(metrics.displayHeight, y));
 
     // Dibujar círculo verde brillante para el puesto asignado
     ctx.shadowColor = "rgba(16, 185, 129, 0.5)";
