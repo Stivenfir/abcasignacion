@@ -1,5 +1,10 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
+import {
+  syncCanvasToImage,
+  drawDelimitaciones as drawDelimitacionesCanvas,
+  drawPuesto,
+} from "../../utils/mapCanvas";
 
 export default function PreviewMapaPuestos({
   pisoSeleccionado,
@@ -9,19 +14,51 @@ export default function PreviewMapaPuestos({
 }) {
   const [planoUrl, setPlanoUrl] = useState(null);
   const canvasRef = useRef(null);
+  const imagenRef = useRef(null);
   const [delimitaciones, setDelimitaciones] = useState([]);
   const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
-  useEffect(() => {
-    cargarPlano();
-  }, [pisoSeleccionado]);
+  const sincronizarCanvasConImagen = useCallback(() => {
+    syncCanvasToImage(canvasRef.current, imagenRef.current);
+  }, []);
 
-  // ✅ CORREGIDO: Agregar delimitaciones como dependencia
+  const dibujarPuestos = useCallback(() => {
+    if (!canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+
+    if (canvas.width === 0 || canvas.height === 0) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    drawDelimitacionesCanvas(ctx, delimitaciones);
+
+    ctx.setLineDash([]);
+
+    puestos.forEach((puesto) => {
+      if (puesto.UbicacionX == null || puesto.UbicacionY == null) return;
+
+      let color = puesto.Disponible === "SI" ? "#10B981" : "#EF4444";
+      if (puesto.AsignadoA) color = "#F59E0B";
+
+      drawPuesto(ctx, puesto, color);
+    });
+  }, [delimitaciones, puestos]);
+
   useEffect(() => {
-    if (planoUrl && puestos.length > 0 && canvasRef.current) {
-      dibujarPuestos();
+    const cargarPlano = async () => {
+      const res = await fetch(
+        `${API}/api/pisos/plano/${pisoSeleccionado.IDPiso}`,
+      );
+      const data = await res.json();
+      if (data.success) setPlanoUrl(`${API}${data.ruta}`);
+    };
+
+    if (pisoSeleccionado?.IDPiso) {
+      cargarPlano();
     }
-  }, [planoUrl, puestos, delimitaciones]);
+  }, [API, pisoSeleccionado]);
 
   useEffect(() => {
     const cargarDelimitaciones = async () => {
@@ -32,103 +69,35 @@ export default function PreviewMapaPuestos({
           { headers: { Authorization: `Bearer ${token}` } },
         );
         const data = await res.json();
-        console.log("✅ Delimitaciones cargadas:", data); // DEBUG
         setDelimitaciones(data);
-
-        // ✅ AGREGAR: Forzar redibujo cuando llegan las delimitaciones
-        if (canvasRef.current && planoUrl && puestos.length > 0) {
-          dibujarPuestos();
-        }
       } catch (error) {
-        console.error("❌ Error al cargar delimitaciones:", error);
+        console.error("Error al cargar delimitaciones:", error);
       }
     };
 
-    if (areaSeleccionada) {
-      console.log(
-        "📍 Cargando delimitaciones para área:",
-        areaSeleccionada.IdAreaPiso,
-      ); // DEBUG
+    if (areaSeleccionada?.IdAreaPiso) {
       cargarDelimitaciones();
     }
-  }, [areaSeleccionada]);
+  }, [API, areaSeleccionada]);
 
-  const cargarPlano = async () => {
-    const res = await fetch(
-      `${API}/api/pisos/plano/${pisoSeleccionado.IDPiso}`,
-    );
-    const data = await res.json();
-    if (data.success) setPlanoUrl(`${API}${data.ruta}`);
-  };
+  useEffect(() => {
+    if (planoUrl && canvasRef.current) {
+      sincronizarCanvasConImagen();
+      dibujarPuestos();
+    }
+  }, [planoUrl, puestos, delimitaciones, sincronizarCanvasConImagen, dibujarPuestos]);
 
-  const dibujarPuestos = () => {
-    if (!canvasRef.current) return;
+  useEffect(() => {
+    if (!imagenRef.current || !planoUrl) return;
 
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-
-    // ✅ AGREGAR: Verificar que el canvas tenga dimensiones
-    if (canvas.width === 0 || canvas.height === 0) return;
-
-    // ✅ AGREGAR: Limpiar canvas primero
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // 1️⃣ Dibujar delimitaciones primero (zona azul)
-    delimitaciones.forEach((d) => {
-      ctx.strokeStyle = "#3B82F6";
-      ctx.lineWidth = 2;
-      ctx.setLineDash([5, 5]);
-      ctx.fillStyle = "rgba(59, 130, 246, 0.15)";
-
-      ctx.fillRect(
-        Number(d.PosicionX),
-        Number(d.PosicionY),
-        Number(d.Ancho),
-        Number(d.Alto),
-      );
-      ctx.strokeRect(
-        Number(d.PosicionX),
-        Number(d.PosicionY),
-        Number(d.Ancho),
-        Number(d.Alto),
-      );
+    const observer = new ResizeObserver(() => {
+      sincronizarCanvasConImagen();
+      dibujarPuestos();
     });
 
-    // ✅ AGREGAR: Reset line dash para los puestos
-    ctx.setLineDash([]);
-
-    // 2️⃣ Dibujar puestos con colores según estado
-    puestos.forEach((puesto) => {
-      if (!puesto.UbicacionX || !puesto.UbicacionY) return;
-
-      let color = puesto.Disponible === "SI" ? "#10B981" : "#EF4444";
-      if (puesto.AsignadoA) color = "#F59E0B";
-
-      ctx.beginPath();
-      ctx.arc(
-        Number(puesto.UbicacionX),
-        Number(puesto.UbicacionY),
-        8,
-        0,
-        2 * Math.PI,
-      );
-      ctx.fillStyle = color;
-      ctx.fill();
-      ctx.strokeStyle = "#FFFFFF";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      ctx.fillStyle = "#FFFFFF";
-      ctx.font = "bold 10px Arial";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(
-        puesto.NoPuesto,
-        Number(puesto.UbicacionX),
-        Number(puesto.UbicacionY),
-      );
-    });
-  };
+    observer.observe(imagenRef.current);
+    return () => observer.disconnect();
+  }, [planoUrl, sincronizarCanvasConImagen, dibujarPuestos]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -169,17 +138,13 @@ export default function PreviewMapaPuestos({
 
           <div className="relative border-2 border-gray-300 rounded-lg overflow-hidden">
             <img
+              ref={imagenRef}
               src={planoUrl}
               alt="Plano"
               className="max-w-full h-auto block"
-              onLoad={(e) => {
-                if (canvasRef.current) {
-                      console.log('PREVIEW - Dimensiones:', e.target.naturalWidth, e.target.naturalHeight);  
-                      console.log('PREVIEW - URL:', planoUrl);  
-                  canvasRef.current.width = e.target.naturalWidth;
-                  canvasRef.current.height = e.target.naturalHeight;
-                  dibujarPuestos();
-                }
+              onLoad={() => {
+                sincronizarCanvasConImagen();
+                dibujarPuestos();
               }}
             />
             <canvas ref={canvasRef} className="absolute top-0 left-0" />
