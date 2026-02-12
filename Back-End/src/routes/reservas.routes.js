@@ -39,6 +39,47 @@ function normalizeAreaId(rawArea) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+
+
+function isValidApiTextResponse(rta) {
+  return Boolean(rta) && !rta.trim().startsWith('Array') && !rta.trim().startsWith(':');
+}
+
+async function resolverIdAreaPorEmpleado(idEmpleado) {
+  const idEmpleadoNum = Number(idEmpleado);
+  if (!Number.isInteger(idEmpleadoNum) || idEmpleadoNum <= 0) return null;
+
+  const query = `
+    SELECT TOP (1)
+      C.IDArea
+    FROM ABCDeskBooking.dbo.Empleado E
+    LEFT JOIN ABCDeskBooking.dbo.Cargo C ON C.IDCargo = E.IDCargo
+    WHERE E.IdEmpleado = ${idEmpleadoNum}
+  `;
+
+  const rta = await GetData(`ConsultaSQL=${encodeURIComponent(query)}`);
+  if (!isValidApiTextResponse(rta)) return null;
+
+  const data = JSON.parse(rta.trim())["data"];
+  if (!Array.isArray(data) || !data.length) return null;
+
+  return normalizeAreaId(data[0]?.IDArea);
+}
+
+async function obtenerAreaEfectiva(reqUser) {
+  const areaToken = normalizeAreaId(reqUser?.idArea);
+  if (areaToken) {
+    return { idArea: areaToken, source: 'token' };
+  }
+
+  const areaEmpleado = await resolverIdAreaPorEmpleado(reqUser?.idEmpleado);
+  if (areaEmpleado) {
+    return { idArea: areaEmpleado, source: 'empleado_cargo' };
+  }
+
+  return { idArea: null, source: 'sin_area' };
+}
+
 function logAuditoria(accion, usuario, detalles) {        
   const timestamp = new Date().toISOString();        
   const logEntry = { timestamp, accion, usuario, ...detalles };        
@@ -95,10 +136,12 @@ router.get("/empleado", authenticateToken, async (req, res) => {
 
 // GET - Obtener pisos habilitados para el área del usuario
 router.get("/pisos-habilitados", authenticateToken, async (req, res) => {
-  const idArea = normalizeAreaId(req.user.idArea);
   const usuario = req.user.username;
+  let idArea = null;
+  let idAreaSource = "sin_area";
 
   try {
+    ({ idArea, source: idAreaSource } = await obtenerAreaEfectiva(req.user));
     const queryPorArea = idArea
       ? `
       SELECT DISTINCT
@@ -120,7 +163,7 @@ router.get("/pisos-habilitados", authenticateToken, async (req, res) => {
 
     if (queryPorArea) {
       const rtaArea = await GetData(`ConsultaSQL=${encodeURIComponent(queryPorArea)}`);
-      if (rtaArea && !rtaArea.trim().startsWith('Array') && !rtaArea.trim().startsWith(':')) {
+      if (isValidApiTextResponse(rtaArea)) {
         const dataArea = JSON.parse(rtaArea.trim())["data"];
         pisos = Array.isArray(dataArea) ? dataArea : [];
       }
@@ -141,7 +184,7 @@ router.get("/pisos-habilitados", authenticateToken, async (req, res) => {
       `;
 
       const rtaGlobal = await GetData(`ConsultaSQL=${encodeURIComponent(queryGlobal)}`);
-      if (rtaGlobal && !rtaGlobal.trim().startsWith('Array') && !rtaGlobal.trim().startsWith(':')) {
+      if (isValidApiTextResponse(rtaGlobal)) {
         const dataGlobal = JSON.parse(rtaGlobal.trim())["data"];
         pisos = Array.isArray(dataGlobal) ? dataGlobal : [];
         scope = "global";
@@ -160,7 +203,7 @@ router.get("/pisos-habilitados", authenticateToken, async (req, res) => {
       `;
 
       const rtaAllPisos = await GetData(`ConsultaSQL=${encodeURIComponent(queryAllPisos)}`);
-      if (rtaAllPisos && !rtaAllPisos.trim().startsWith('Array') && !rtaAllPisos.trim().startsWith(':')) {
+      if (isValidApiTextResponse(rtaAllPisos)) {
         const dataAllPisos = JSON.parse(rtaAllPisos.trim())["data"];
         pisos = Array.isArray(dataAllPisos) ? dataAllPisos : [];
         scope = "all-pisos";
@@ -169,6 +212,7 @@ router.get("/pisos-habilitados", authenticateToken, async (req, res) => {
 
     logAuditoria('CONSULTAR_PISOS_HABILITADOS', usuario, {
       idArea,
+      idAreaSource,
       scope,
       resultado: 'success',
       cantidad: pisos.length,
@@ -179,6 +223,7 @@ router.get("/pisos-habilitados", authenticateToken, async (req, res) => {
     console.error('Error al obtener pisos habilitados:', error);
     logAuditoria('CONSULTAR_PISOS_HABILITADOS', usuario, {
       idArea,
+      idAreaSource,
       resultado: 'error',
       error: error.message,
     });
@@ -191,9 +236,11 @@ router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {
   const { fecha } = req.params;      
   const { idPiso } = req.query;      
   const usuario = req.user.username;  
-  const idArea = normalizeAreaId(req.user.idArea);  // ✅ AGREGAR: Extraer idArea del token JWT  
+  let idArea = null;
+  let idAreaSource = "sin_area";
             
   try {  
+    ({ idArea, source: idAreaSource } = await obtenerAreaEfectiva(req.user));
     const fechaSql = toSqlDateYYYYMMDD(fecha);
     if (!fechaSql) {
       return res.status(400).json({ message: "Fecha inválida. Usa formato YYYY-MM-DD" });
@@ -207,7 +254,8 @@ router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {
       logAuditoria('CONSULTAR_PUESTOS_DISPONIBLES', usuario, {            
         fecha,      
         idPiso,  
-        idArea,  // ✅ Agregar a logs  
+        idArea,
+        idAreaSource,
         resultado: 'error',            
         error: 'Servicio de base de datos devolvió formato inválido'            
       });            
@@ -225,7 +273,7 @@ router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {
       
     if (idArea && D.length === 0) {
       const rtaGlobal = await GetData(`ConsultaReservas=@P%3D2,@Fecha%3D'${fechaSql}'`);
-      if (rtaGlobal && !rtaGlobal.trim().startsWith('Array') && !rtaGlobal.trim().startsWith(':')) {
+      if (isValidApiTextResponse(rtaGlobal)) {
         const dataGlobal = JSON.parse(rtaGlobal.trim())["data"];
         if (Array.isArray(dataGlobal)) {
           D = dataGlobal;
@@ -269,7 +317,8 @@ router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {
     logAuditoria('CONSULTAR_PUESTOS_DISPONIBLES', usuario, {            
       fecha,      
       idPiso,  
-      idArea,  // ✅ Agregar a logs  
+      idArea,
+      idAreaSource,
       resultado: 'success',            
       cantidad: D.length            
     });            
@@ -280,7 +329,8 @@ router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {
     logAuditoria('CONSULTAR_PUESTOS_DISPONIBLES', usuario, {            
       fecha,      
       idPiso,  
-      idArea,  // ✅ Agregar a logs  
+      idArea,
+      idAreaSource,
       resultado: 'error',            
       error: error.message            
     });            
@@ -291,10 +341,13 @@ router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {
 // GET - Obtener disponibilidad de puestos por área en un piso  
 router.get("/disponibilidad-area", authenticateToken, async (req, res) => {  
   const { idPiso } = req.query;  
-  const idArea = req.user.idArea;  
   const usuario = req.user.username;  
   
   try {  
+    const { idArea } = await obtenerAreaEfectiva(req.user);
+    if (!idArea) {
+      return res.json({ cantidadPuestos: 0 });
+    }
     // Consultar cuántos puestos tiene el área en ese piso  
     const query = `  
       SELECT COUNT(*) as cantidadPuestos  
