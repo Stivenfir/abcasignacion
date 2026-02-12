@@ -49,6 +49,10 @@ function esPuestoMapeado(puesto) {
     String(puesto?.TieneMapeo || "").trim() === "1";
 }
 
+function esPuestoReservable(puesto) {
+  return esPuestoDisponible(puesto) && esPuestoMapeado(puesto);
+}
+
 const FESTIVOS_FIJOS_MMDD = new Set([
   "01-01", // Año Nuevo
   "05-01", // Día del Trabajo
