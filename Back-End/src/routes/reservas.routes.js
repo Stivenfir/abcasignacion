@@ -159,54 +159,13 @@ router.get("/pisos-habilitados", authenticateToken, async (req, res) => {
       : null;
 
     let pisos = [];
-    let scope = "area";
+    const scope = "area";
 
     if (queryPorArea) {
       const rtaArea = await GetData(`ConsultaSQL=${encodeURIComponent(queryPorArea)}`);
       if (isValidApiTextResponse(rtaArea)) {
         const dataArea = JSON.parse(rtaArea.trim())["data"];
         pisos = Array.isArray(dataArea) ? dataArea : [];
-      }
-    }
-
-    if (!pisos.length) {
-      const queryGlobal = `
-        SELECT DISTINCT
-          P.IDPiso,
-          P.NumeroPiso,
-          P.Bodega,
-          COUNT(PT.IdPuestoTrabajo) as TotalPuestosArea
-        FROM ABCDeskBooking.dbo.Piso P
-        INNER JOIN ABCDeskBooking.dbo.AreaPiso AP ON AP.IdPiso = P.IDPiso
-        INNER JOIN ABCDeskBooking.dbo.PuestoTrabajo PT ON PT.IdAreaPiso = AP.IdAreaPiso
-        GROUP BY P.IDPiso, P.NumeroPiso, P.Bodega
-        ORDER BY P.Bodega, P.NumeroPiso
-      `;
-
-      const rtaGlobal = await GetData(`ConsultaSQL=${encodeURIComponent(queryGlobal)}`);
-      if (isValidApiTextResponse(rtaGlobal)) {
-        const dataGlobal = JSON.parse(rtaGlobal.trim())["data"];
-        pisos = Array.isArray(dataGlobal) ? dataGlobal : [];
-        scope = "global";
-      }
-    }
-
-    if (!pisos.length) {
-      const queryAllPisos = `
-        SELECT
-          P.IDPiso,
-          P.NumeroPiso,
-          P.Bodega,
-          NULL as TotalPuestosArea
-        FROM ABCDeskBooking.dbo.Piso P
-        ORDER BY P.Bodega, P.NumeroPiso
-      `;
-
-      const rtaAllPisos = await GetData(`ConsultaSQL=${encodeURIComponent(queryAllPisos)}`);
-      if (isValidApiTextResponse(rtaAllPisos)) {
-        const dataAllPisos = JSON.parse(rtaAllPisos.trim())["data"];
-        pisos = Array.isArray(dataAllPisos) ? dataAllPisos : [];
-        scope = "all-pisos";
       }
     }
 
@@ -271,16 +230,6 @@ router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {
       return res.json([]);            
     }      
       
-    if (idArea && D.length === 0) {
-      const rtaGlobal = await GetData(`ConsultaReservas=@P%3D2,@Fecha%3D'${fechaSql}'`);
-      if (isValidApiTextResponse(rtaGlobal)) {
-        const dataGlobal = JSON.parse(rtaGlobal.trim())["data"];
-        if (Array.isArray(dataGlobal)) {
-          D = dataGlobal;
-        }
-      }
-    }
-
     // ✅ Eliminar duplicados basándose en IdPuestoTrabajo    
     const puestosUnicos = [];    
     const idsVistos = new Set();    
