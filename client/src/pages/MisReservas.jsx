@@ -1,7 +1,7 @@
 // client/src/pages/MisReservas.jsx
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { useReservas } from "./hooks/useReservas";
 import ReservasSidebar from "./components/reservas/ReservasSidebar";
 import ReservasPanel from "./components/reservas/ReservasPanel";
@@ -12,64 +12,36 @@ import AyudaReservas from "./components/reservas/AyudaReservas";
 export default function MisReservas() {
   const navigate = useNavigate();
   const reservasData = useReservas();
-  const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
   const [modalConfirmacion, setModalConfirmacion] = useState(false);
-  const [reservaPendiente, setReservaPendiente] = useState(null);
   const [modalVisualizacion, setModalVisualizacion] = useState(false);
+  const [reservaPendiente, setReservaPendiente] = useState(null);
 
   const handleSolicitarReserva = async (fechaSeleccionada) => {
     try {
       if (!reservasData.pisoSeleccionado?.IDPiso) {
         reservasData.setMensaje({
           tipo: "error",
-          texto: "✗ Debes seleccionar un piso primero",
+          texto: "✗ Debes seleccionar un piso habilitado primero",
         });
         return;
       }
 
-      console.log(
-        "📍 Solicitando puestos disponibles para fecha:",
-        fechaSeleccionada,
+      if (!fechaSeleccionada) {
+        throw new Error("Debe seleccionar una fecha válida");
+      }
+
+      const fechaFormateada =
+        fechaSeleccionada instanceof Date
+          ? fechaSeleccionada.toISOString().split("T")[0]
+          : fechaSeleccionada;
+
+      const puestoAsignado = await reservasData.obtenerPuestoDisponible(
+        reservasData.pisoSeleccionado.IDPiso,
+        fechaFormateada,
       );
-      console.log("📍 Piso seleccionado:", reservasData.pisoSeleccionado);
 
-      const token = localStorage.getItem("token");
-
-      const fechaFormateada = new Date(fechaSeleccionada)
-        .toISOString()
-        .split("T")[0];
-      const url = `${API}/api/reservas/disponibles/${fechaFormateada}`;
-
-      console.log("📍 URL:", url);
-
-      const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      console.log("📍 Response status:", res.status);
-      console.log("📍 Response ok:", res.ok);
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error("❌ Error response:", errorText);
-        throw new Error(`HTTP ${res.status}: ${errorText}`);
-      }
-
-      const puestosDisponibles = await res.json();
-      console.log("✅ Puestos disponibles:", puestosDisponibles);
-
-      if (!puestosDisponibles || puestosDisponibles.length === 0) {
-        reservasData.setMensaje({
-          tipo: "error",
-          texto: "✗ No hay puestos disponibles para esta fecha",
-        });
-        return;
-      }
-
-      const puestoAsignado = puestosDisponibles[0];
+      if (!puestoAsignado) return;
 
       setReservaPendiente({
         fecha: fechaSeleccionada,
@@ -79,8 +51,7 @@ export default function MisReservas() {
 
       setModalConfirmacion(true);
     } catch (error) {
-      console.error("❌ Error completo:", error);
-      console.error("❌ Stack trace:", error.stack);
+      console.error("Error en handleSolicitarReserva:", error);
       reservasData.setMensaje({
         tipo: "error",
         texto: `✗ ${error.message}`,
@@ -90,8 +61,6 @@ export default function MisReservas() {
 
   const handleConfirmarReserva = async () => {
     try {
-      console.log("📍 Confirmando reserva con:", reservaPendiente);
-
       if (!reservaPendiente?.puestoAsignado?.IdPuestoTrabajo) {
         throw new Error("No se pudo obtener el ID del puesto");
       }
@@ -107,11 +76,7 @@ export default function MisReservas() {
           ? reservaPendiente.fecha.toISOString().split("T")[0]
           : reservaPendiente.fecha;
 
-      console.log("📍 Datos a enviar:", {
-        idPuestoTrabajo: reservaPendiente.puestoAsignado.IdPuestoTrabajo,
-        fecha: fechaFormateada,
-      });
-
+      const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
       const res = await fetch(`${API}/api/reservas`, {
         method: "POST",
         headers: {
@@ -119,24 +84,19 @@ export default function MisReservas() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          idPuestoTrabajo: Number(
-            reservaPendiente.puestoAsignado.IdPuestoTrabajo,
-          ),
+          idPuestoTrabajo: Number(reservaPendiente.puestoAsignado.IdPuestoTrabajo),
           fecha: fechaFormateada,
         }),
       });
 
-      console.log("📍 Response status:", res.status);
-
       if (!res.ok) {
         const errorData = await res.json();
-        console.error("❌ Error del servidor:", errorData);
-        throw new Error("Error al crear la reserva");
+        throw new Error(errorData.error || "Error al crear la reserva");
       }
 
       reservasData.setMensaje({
         tipo: "success",
-        texto: "✓ Reserva creada exitosamente",
+        texto: "✓ Reserva creada exitosamente (puesto auto-asignado por área)",
       });
 
       setModalConfirmacion(false);
@@ -173,11 +133,9 @@ export default function MisReservas() {
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                📋 Mis Reservas
-              </h1>
+              <h1 className="text-2xl font-bold text-gray-900">📋 Mis Reservas</h1>
               <p className="text-sm text-gray-600 mt-1">
-                Gestiona tus reservas de puestos de trabajo
+                Auto-asignación inteligente por área y pisos habilitados
               </p>
             </div>
             <button
@@ -206,7 +164,6 @@ export default function MisReservas() {
       )}
 
       <main className="p-6">
-        {/* ✅ AGREGAR: Componente de ayuda contextual */}
         <AyudaReservas
           pisos={reservasData.pisos}
           onSeleccionarPiso={reservasData.setPisoSeleccionado}
