@@ -1,5 +1,5 @@
 // client/src/pages/components/puestos/MapearPuestoModal.jsx
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 
 export default function MapearPuestoModal({
@@ -21,6 +21,22 @@ export default function MapearPuestoModal({
   const [zoomLevel, setZoomLevel] = useState(1);
   const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
   const containerRef = useRef(null);
+
+  const sincronizarCanvasConImagen = useCallback(() => {
+    if (!canvasRef.current || !imagenRef.current) return;
+
+    const canvas = canvasRef.current;
+    const imagen = imagenRef.current;
+    const width = imagen.clientWidth;
+    const height = imagen.clientHeight;
+
+    if (!width || !height) return;
+
+    canvas.width = width;
+    canvas.height = height;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+  }, []);
 
   // Cargar plano al montar
   useEffect(() => {
@@ -163,6 +179,8 @@ export default function MapearPuestoModal({
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
 
+    sincronizarCanvasConImagen();
+
     // Limpiar canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -278,6 +296,7 @@ export default function MapearPuestoModal({
             dibujarPunto(puntoSeleccionado.x, puntoSeleccionado.y);
           } else {
             // Dibujar solo delimitaciones y puestos existentes
+            sincronizarCanvasConImagen();
             const ctx = canvasRef.current.getContext("2d");
             ctx.clearRect(
               0,
@@ -326,7 +345,7 @@ export default function MapearPuestoModal({
     if (areaSeleccionada) {
       cargarDelimitaciones();
     }
-  }, [areaSeleccionada, puestosExistentes]); // ✅ Agregar puestosExistentes como dependencia
+  }, [areaSeleccionada, puestosExistentes, sincronizarCanvasConImagen]); // ✅ Agregar puestosExistentes como dependencia
 
   const dibujarDelimitaciones = () => {
     if (!canvasRef.current || delimitaciones.length === 0) return;
@@ -361,6 +380,7 @@ export default function MapearPuestoModal({
         dibujarPunto(puntoSeleccionado.x, puntoSeleccionado.y);
       } else {
         // Redibujar solo delimitaciones y grilla
+        sincronizarCanvasConImagen();
         const ctx = canvasRef.current.getContext("2d");
         ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
         dibujarGrilla();
@@ -396,7 +416,27 @@ export default function MapearPuestoModal({
         });
       }
     }
-  }, [mostrarGrilla, delimitaciones, puestosExistentes]);
+  }, [mostrarGrilla, delimitaciones, puestosExistentes, planoUrl, puntoSeleccionado, sincronizarCanvasConImagen]);
+
+
+  useEffect(() => {
+    if (!imagenRef.current || !planoUrl) return;
+
+    const observer = new ResizeObserver(() => {
+      sincronizarCanvasConImagen();
+      if (puntoSeleccionado) {
+        dibujarPunto(puntoSeleccionado.x, puntoSeleccionado.y);
+      } else if (canvasRef.current) {
+        const ctx = canvasRef.current.getContext("2d");
+        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+        dibujarGrilla();
+        dibujarDelimitaciones();
+      }
+    });
+
+    observer.observe(imagenRef.current);
+    return () => observer.disconnect();
+  }, [planoUrl, puntoSeleccionado, sincronizarCanvasConImagen]);
 
   return (
     <div
@@ -544,35 +584,14 @@ export default function MapearPuestoModal({
                     src={planoUrl}
                     alt="Plano del piso"
                     className="max-w-full h-auto block"
-                    onLoadStart={() =>
-                      console.log("🟡 MAPEAR - Imagen comenzando a cargar")
-                    }
-                    onLoad={(e) => {
-                      console.log("🔵 MAPEAR - onLoad EJECUTADO");
-                      console.log(
-                        "🔵 MAPEAR - canvasRef.current:",
-                        canvasRef.current,
-                      );
-                      console.log("🔵 MAPEAR - e.target:", e.target);
+                    onLoad={() => {
+                      sincronizarCanvasConImagen();
 
-                      if (canvasRef.current) {
-                        console.log(
-                          "MAPEAR - Dimensiones:",
-                          e.target.naturalWidth,
-                          e.target.naturalHeight,
+                      if (puntoSeleccionado) {
+                        dibujarPunto(
+                          puntoSeleccionado.x,
+                          puntoSeleccionado.y,
                         );
-                        console.log("MAPEAR - URL:", planoUrl);
-                        canvasRef.current.width = e.target.naturalWidth;
-                        canvasRef.current.height = e.target.naturalHeight;
-
-                        if (puntoSeleccionado) {
-                          dibujarPunto(
-                            puntoSeleccionado.x,
-                            puntoSeleccionado.y,
-                          );
-                        }
-                      } else {
-                        console.log("❌ MAPEAR - canvasRef.current es NULL");
                       }
                     }}
                     onError={() => {

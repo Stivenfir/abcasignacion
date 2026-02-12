@@ -1,5 +1,5 @@
 // client/src/pages/components/puestos/PuestoModal.jsx
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 
 export default function PuestoModal({
@@ -29,6 +29,22 @@ export default function PuestoModal({
   const [zoomLevel, setZoomLevel] = useState(1);
   const [puestosExistentes, setPuestosExistentes] = useState([]);
   const containerRef = useRef(null);
+
+  const sincronizarCanvasConImagen = useCallback(() => {
+    if (!canvasRef.current || !imagenRef.current) return;
+
+    const canvas = canvasRef.current;
+    const imagen = imagenRef.current;
+    const width = imagen.clientWidth;
+    const height = imagen.clientHeight;
+
+    if (!width || !height) return;
+
+    canvas.width = width;
+    canvas.height = height;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+  }, []);
 
   // Cargar plano al montar
   useEffect(() => {
@@ -113,6 +129,8 @@ export default function PuestoModal({
       const canvas = canvasRef.current;
       const ctx = canvas.getContext("2d");
 
+      sincronizarCanvasConImagen();
+
       // Limpiar canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -153,6 +171,7 @@ export default function PuestoModal({
     planoUrl,
     modoCreacion,
     mostrarGrilla,
+    sincronizarCanvasConImagen,
   ]);
 
   // Redibujar cuando cambia mostrarGrilla
@@ -408,6 +427,21 @@ export default function PuestoModal({
     }
   };
 
+
+  useEffect(() => {
+    if (!imagenRef.current || !planoUrl || modoCreacion !== "con-mapeo") return;
+
+    const observer = new ResizeObserver(() => {
+      sincronizarCanvasConImagen();
+      if (puntoSeleccionado) {
+        dibujarPunto();
+      }
+    });
+
+    observer.observe(imagenRef.current);
+    return () => observer.disconnect();
+  }, [planoUrl, modoCreacion, puntoSeleccionado, sincronizarCanvasConImagen]);
+
   return (
     <div
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
@@ -599,91 +633,53 @@ export default function PuestoModal({
                       src={planoUrl}
                       alt="Plano del piso"
                       className="max-w-full h-auto"
-                      onLoad={(e) => {
-                        console.log("🔵 PUESTO MODAL - onLoad EJECUTADO");
-                        console.log(
-                          "🔵 PUESTO MODAL - canvasRef.current:",
-                          canvasRef.current,
-                        );
-                        console.log("🔵 PUESTO MODAL - e.target:", e.target);
+                      onLoad={() => {
+                        if (!canvasRef.current) return;
 
-                        if (canvasRef.current) {
-                          console.log(
-                            "🔵 PUESTO MODAL - Dimensiones:",
-                            e.target.naturalWidth,
-                            e.target.naturalHeight,
+                        sincronizarCanvasConImagen();
+
+                        if (delimitaciones.length > 0) {
+                          const ctx = canvasRef.current.getContext("2d");
+                          ctx.clearRect(
+                            0,
+                            0,
+                            canvasRef.current.width,
+                            canvasRef.current.height,
                           );
-                          console.log("🔵 PUESTO MODAL - URL:", planoUrl);
-                          console.log(
-                            "🔵 PUESTO MODAL - Dimensiones renderizadas (width/height):",
-                            e.target.width,
-                            e.target.height,
-                          );
+                          dibujarGrilla();
+                          dibujarDelimitaciones();
 
-                          canvasRef.current.width = e.target.naturalWidth;
-                          canvasRef.current.height = e.target.naturalHeight;
+                          puestosExistentes.forEach((p) => {
+                            if (p.UbicacionX && p.UbicacionY) {
+                              ctx.beginPath();
+                              ctx.arc(
+                                Number(p.UbicacionX),
+                                Number(p.UbicacionY),
+                                8,
+                                0,
+                                2 * Math.PI,
+                              );
+                              ctx.fillStyle = "#9CA3AF";
+                              ctx.fill();
+                              ctx.strokeStyle = "#6B7280";
+                              ctx.lineWidth = 2;
+                              ctx.stroke();
 
-                          // ✅ AGREGAR: Dibujar inmediatamente si hay delimitaciones
-                          if (delimitaciones.length > 0) {
-                            const ctx = canvasRef.current.getContext("2d");
-                            ctx.clearRect(
-                              0,
-                              0,
-                              canvasRef.current.width,
-                              canvasRef.current.height,
-                            );
-                            dibujarGrilla();
-                            dibujarDelimitaciones();
+                              ctx.fillStyle = "#FFFFFF";
+                              ctx.font = "bold 10px Arial";
+                              ctx.textAlign = "center";
+                              ctx.textBaseline = "middle";
+                              ctx.fillText(
+                                p.NoPuesto,
+                                Number(p.UbicacionX),
+                                Number(p.UbicacionY),
+                              );
+                            }
+                          });
+                        }
 
-                            // Dibujar puestos existentes
-                            puestosExistentes.forEach((p) => {
-                              if (p.UbicacionX && p.UbicacionY) {
-                                console.log(
-                                  "🔵 PUESTO MODAL - Dibujando puesto existente:",
-                                  p.NoPuesto,
-                                  "en",
-                                  p.UbicacionX,
-                                  p.UbicacionY,
-                                );
-                                ctx.beginPath();
-                                ctx.arc(
-                                  Number(p.UbicacionX),
-                                  Number(p.UbicacionY),
-                                  8,
-                                  0,
-                                  2 * Math.PI,
-                                );
-                                ctx.fillStyle = "#9CA3AF";
-                                ctx.fill();
-                                ctx.strokeStyle = "#6B7280";
-                                ctx.lineWidth = 2;
-                                ctx.stroke();
-
-                                ctx.fillStyle = "#FFFFFF";
-                                ctx.font = "bold 10px Arial";
-                                ctx.textAlign = "center";
-                                ctx.textBaseline = "middle";
-                                ctx.fillText(
-                                  p.NoPuesto,
-                                  Number(p.UbicacionX),
-                                  Number(p.UbicacionY),
-                                );
-                              }
-                            });
-                          }
-
-                          // Si hay punto seleccionado (modo edición), dibujarlo
-                          if (puntoSeleccionado) {
-                            console.log(
-                              "🔵 PUESTO MODAL - Dibujando punto seleccionado:",
-                              puntoSeleccionado,
-                            );
-                            dibujarPunto();
-                          }
-                        } else {
-                          console.log(
-                            "❌ PUESTO MODAL - canvasRef.current es NULL",
-                          );
+                        if (puntoSeleccionado) {
+                          dibujarPunto();
                         }
                       }}
                     />
