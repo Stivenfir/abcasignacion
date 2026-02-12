@@ -1,6 +1,21 @@
 // client/src/pages/components/puestos/PuestoModal.jsx
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
+import {
+  syncCanvasToImage,
+  getCanvasPointFromEvent,
+  drawGrid as drawGridCanvas,
+  drawDelimitaciones as drawDelimitacionesCanvas,
+  drawPuesto,
+  drawSelectedPuesto,
+} from "../../utils/mapCanvas";
+
+
+const normalizarDisponible = (valor) => {
+  const texto = String(valor ?? "").trim().toUpperCase();
+  if (["SI", "SÍ", "1", "TRUE", "DISPONIBLE"].includes(texto)) return "SI";
+  return "NO";
+};
 
 export default function PuestoModal({
   pisoSeleccionado,
@@ -15,9 +30,10 @@ export default function PuestoModal({
   const [error, setError] = useState(null);
   const [modoCreacion, setModoCreacion] = useState("con-mapeo");
   const [puntoSeleccionado, setPuntoSeleccionado] = useState(null);
+  const [cursorPos, setCursorPos] = useState(null);
   const [formData, setFormData] = useState({
     noPuesto: puestoAEditar?.NoPuesto || "",
-    disponible: puestoAEditar?.Disponible || "SI",
+    disponible: normalizarDisponible(puestoAEditar?.Disponible || "SI"),
     idClasificacion: puestoAEditar?.IDClasificacionPuesto || "",
   });
 
@@ -29,6 +45,10 @@ export default function PuestoModal({
   const [zoomLevel, setZoomLevel] = useState(1);
   const [puestosExistentes, setPuestosExistentes] = useState([]);
   const containerRef = useRef(null);
+
+  const sincronizarCanvasConImagen = useCallback(() => {
+    syncCanvasToImage(canvasRef.current, imagenRef.current);
+  }, []);
 
   // Cargar plano al montar
   useEffect(() => {
@@ -113,6 +133,8 @@ export default function PuestoModal({
       const canvas = canvasRef.current;
       const ctx = canvas.getContext("2d");
 
+      sincronizarCanvasConImagen();
+
       // Limpiar canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -124,7 +146,7 @@ export default function PuestoModal({
 
       // Dibujar puestos existentes
       puestosExistentes.forEach((p) => {
-        if (p.UbicacionX && p.UbicacionY) {
+        if (p.UbicacionX != null && p.UbicacionY != null) {
           ctx.beginPath();
           ctx.arc(
             Number(p.UbicacionX),
@@ -153,6 +175,7 @@ export default function PuestoModal({
     planoUrl,
     modoCreacion,
     mostrarGrilla,
+    sincronizarCanvasConImagen,
   ]);
 
   // Redibujar cuando cambia mostrarGrilla
@@ -201,11 +224,7 @@ export default function PuestoModal({
     if (!canvasRef.current || modoCreacion === "sin-mapeo") return;
 
     const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const x = Math.round((e.clientX - rect.left) * scaleX);
-    const y = Math.round((e.clientY - rect.top) * scaleY);
+    const { x, y } = getCanvasPointFromEvent(e, canvas);
 
     // Validar que esté dentro del área delimitada
     const dentroDeArea = delimitaciones.some(
@@ -226,58 +245,29 @@ export default function PuestoModal({
     setPuntoSeleccionado({ x, y });
   };
 
-  const dibujarGrilla = () => {
-    if (!canvasRef.current || !mostrarGrilla) return;
 
+  const handleCanvasMouseMove = (e) => {
+    if (!canvasRef.current || modoCreacion === "sin-mapeo") return;
+
+    const point = getCanvasPointFromEvent(e, canvasRef.current);
+    setCursorPos(point);
+  };
+
+  const handleCanvasMouseLeave = () => {
+    setCursorPos(null);
+  };
+
+  const dibujarGrilla = () => {
+    if (!canvasRef.current) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
-    const gridSize = 20;
-
-    ctx.strokeStyle = "#E5E7EB";
-    ctx.lineWidth = 0.5;
-
-    for (let x = 0; x < canvas.width; x += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, canvas.height);
-      ctx.stroke();
-    }
-
-    for (let y = 0; y < canvas.height; y += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(canvas.width, y);
-      ctx.stroke();
-    }
+    drawGridCanvas(ctx, canvas, mostrarGrilla);
   };
 
   const dibujarDelimitaciones = () => {
     if (!canvasRef.current || delimitaciones.length === 0) return;
-
     const ctx = canvasRef.current.getContext("2d");
-
-    delimitaciones.forEach((d) => {
-      ctx.strokeStyle = "#3B82F6";
-      ctx.lineWidth = 2;
-      ctx.setLineDash([5, 5]);
-      ctx.fillStyle = "rgba(59, 130, 246, 0.1)";
-
-      ctx.fillRect(
-        Number(d.PosicionX),
-        Number(d.PosicionY),
-        Number(d.Ancho),
-        Number(d.Alto),
-      );
-
-      ctx.strokeRect(
-        Number(d.PosicionX),
-        Number(d.PosicionY),
-        Number(d.Ancho),
-        Number(d.Alto),
-      );
-
-      ctx.setLineDash([]);
-    });
+    drawDelimitacionesCanvas(ctx, delimitaciones);
   };
 
   const dibujarPunto = () => {
@@ -295,40 +285,17 @@ export default function PuestoModal({
 
     // 3️⃣ Dibujar puestos existentes
     puestosExistentes.forEach((p) => {
-      if (p.UbicacionX && p.UbicacionY) {
-        ctx.beginPath();
-        ctx.arc(Number(p.UbicacionX), Number(p.UbicacionY), 8, 0, 2 * Math.PI);
-        ctx.fillStyle = "#9CA3AF";
-        ctx.fill();
-        ctx.strokeStyle = "#6B7280";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        ctx.fillStyle = "#FFFFFF";
-        ctx.font = "bold 10px Arial";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(p.NoPuesto, Number(p.UbicacionX), Number(p.UbicacionY));
+      if (p.UbicacionX != null && p.UbicacionY != null) {
+        drawPuesto(ctx, p);
       }
     });
 
-    // 4️⃣ Dibujar punto actual
-    ctx.beginPath();
-    ctx.arc(puntoSeleccionado.x, puntoSeleccionado.y, 15, 0, 2 * Math.PI);
-    ctx.fillStyle = "rgba(59, 130, 246, 0.3)";
-    ctx.fill();
-    ctx.strokeStyle = "#3B82F6";
-    ctx.lineWidth = 3;
-    ctx.stroke();
-
-    ctx.fillStyle = "#1E40AF";
-    ctx.font = "bold 14px Arial";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(
-      formData.noPuesto || "?",
+    // 4️⃣ Dibujar punto actual (mismo centro que preview/mapa)
+    drawSelectedPuesto(
+      ctx,
       puntoSeleccionado.x,
       puntoSeleccionado.y,
+      formData.noPuesto || "?",
     );
   };
 
@@ -408,6 +375,21 @@ export default function PuestoModal({
     }
   };
 
+
+  useEffect(() => {
+    if (!imagenRef.current || !planoUrl || modoCreacion !== "con-mapeo") return;
+
+    const observer = new ResizeObserver(() => {
+      sincronizarCanvasConImagen();
+      if (puntoSeleccionado) {
+        dibujarPunto();
+      }
+    });
+
+    observer.observe(imagenRef.current);
+    return () => observer.disconnect();
+  }, [planoUrl, modoCreacion, puntoSeleccionado, sincronizarCanvasConImagen]);
+
   return (
     <div
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
@@ -421,7 +403,7 @@ export default function PuestoModal({
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+        className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -593,37 +575,82 @@ export default function PuestoModal({
                     )}
                   </div>
 
-                  <div className="relative inline-block border-2 border-gray-300 rounded-xl overflow-hidden">
-                    <img
-                      ref={imagenRef}
-                      src={planoUrl}
-                      alt="Plano del piso"
-                      className="max-w-full h-auto"
-                      onLoad={(e) => {
-                        console.log("🔵 PUESTO MODAL - onLoad EJECUTADO");
-                        console.log(
-                          "🔵 PUESTO MODAL - canvasRef.current:",
-                          canvasRef.current,
-                        );
-                        console.log("🔵 PUESTO MODAL - e.target:", e.target);
+                  <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() =>
+                          setZoomLevel((prev) => Math.max(0.75, prev - 0.1))
+                        }
+                        className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded text-sm"
+                      >
+                        🔍−
+                      </button>
+                      <span className="text-sm text-gray-600 min-w-[60px]">
+                        {Math.round(zoomLevel * 100)}%
+                      </span>
+                      <button
+                        onClick={() =>
+                          setZoomLevel((prev) => Math.min(2.5, prev + 0.1))
+                        }
+                        className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded text-sm"
+                      >
+                        🔍+
+                      </button>
+                      <button
+                        onClick={() => {
+                          setZoomLevel(1);
+                          if (containerRef.current) {
+                            containerRef.current.scrollTop = 0;
+                            containerRef.current.scrollLeft = 0;
+                          }
+                        }}
+                        className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded text-sm"
+                      >
+                        Reset
+                      </button>
+                      <button
+                        onClick={() => setMostrarGrilla((prev) => !prev)}
+                        className={`px-3 py-1 rounded text-sm ${
+                          mostrarGrilla
+                            ? "bg-blue-600 text-white hover:bg-blue-700"
+                            : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                        }`}
+                      >
+                        {mostrarGrilla ? "✓ Grilla" : "⊞ Grilla"}
+                      </button>
+                    </div>
 
-                        if (canvasRef.current) {
-                          console.log(
-                            "🔵 PUESTO MODAL - Dimensiones:",
-                            e.target.naturalWidth,
-                            e.target.naturalHeight,
-                          );
-                          console.log("🔵 PUESTO MODAL - URL:", planoUrl);
-                          console.log(
-                            "🔵 PUESTO MODAL - Dimensiones renderizadas (width/height):",
-                            e.target.width,
-                            e.target.height,
-                          );
+                    <div className="text-xs text-gray-600">
+                      {cursorPos
+                        ? `Cursor: (${Math.round(cursorPos.x)}, ${Math.round(cursorPos.y)})`
+                        : "Mueve el mouse sobre el plano para ver coordenadas"}
+                    </div>
+                  </div>
 
-                          canvasRef.current.width = e.target.naturalWidth;
-                          canvasRef.current.height = e.target.naturalHeight;
+                  <div
+                    ref={containerRef}
+                    className="relative inline-block border-2 border-gray-300 rounded-xl overflow-auto shadow-sm"
+                    style={{ maxHeight: "60vh" }}
+                  >
+                    <div
+                      style={{
+                        transform: `scale(${zoomLevel})`,
+                        transformOrigin: "top left",
+                        transition: "transform 0.2s",
+                        width: "fit-content",
+                        height: "fit-content",
+                      }}
+                    >
+                      <img
+                        ref={imagenRef}
+                        src={planoUrl}
+                        alt="Plano del piso"
+                        className="max-w-full h-auto block"
+                        onLoad={() => {
+                          if (!canvasRef.current) return;
 
-                          // ✅ AGREGAR: Dibujar inmediatamente si hay delimitaciones
+                          sincronizarCanvasConImagen();
+
                           if (delimitaciones.length > 0) {
                             const ctx = canvasRef.current.getContext("2d");
                             ctx.clearRect(
@@ -635,63 +662,26 @@ export default function PuestoModal({
                             dibujarGrilla();
                             dibujarDelimitaciones();
 
-                            // Dibujar puestos existentes
                             puestosExistentes.forEach((p) => {
-                              if (p.UbicacionX && p.UbicacionY) {
-                                console.log(
-                                  "🔵 PUESTO MODAL - Dibujando puesto existente:",
-                                  p.NoPuesto,
-                                  "en",
-                                  p.UbicacionX,
-                                  p.UbicacionY,
-                                );
-                                ctx.beginPath();
-                                ctx.arc(
-                                  Number(p.UbicacionX),
-                                  Number(p.UbicacionY),
-                                  8,
-                                  0,
-                                  2 * Math.PI,
-                                );
-                                ctx.fillStyle = "#9CA3AF";
-                                ctx.fill();
-                                ctx.strokeStyle = "#6B7280";
-                                ctx.lineWidth = 2;
-                                ctx.stroke();
-
-                                ctx.fillStyle = "#FFFFFF";
-                                ctx.font = "bold 10px Arial";
-                                ctx.textAlign = "center";
-                                ctx.textBaseline = "middle";
-                                ctx.fillText(
-                                  p.NoPuesto,
-                                  Number(p.UbicacionX),
-                                  Number(p.UbicacionY),
-                                );
+                              if (p.UbicacionX != null && p.UbicacionY != null) {
+                                drawPuesto(ctx, p);
                               }
                             });
                           }
 
-                          // Si hay punto seleccionado (modo edición), dibujarlo
                           if (puntoSeleccionado) {
-                            console.log(
-                              "🔵 PUESTO MODAL - Dibujando punto seleccionado:",
-                              puntoSeleccionado,
-                            );
                             dibujarPunto();
                           }
-                        } else {
-                          console.log(
-                            "❌ PUESTO MODAL - canvasRef.current es NULL",
-                          );
-                        }
-                      }}
-                    />
-                    <canvas
-                      ref={canvasRef}
-                      className="absolute top-0 left-0 cursor-crosshair"
-                      onClick={handleCanvasClick}
-                    />
+                        }}
+                      />
+                      <canvas
+                        ref={canvasRef}
+                        className="absolute top-0 left-0 cursor-crosshair"
+                        onClick={handleCanvasClick}
+                        onMouseMove={handleCanvasMouseMove}
+                        onMouseLeave={handleCanvasMouseLeave}
+                      />
+                    </div>
                   </div>
                 </div>
               )}
