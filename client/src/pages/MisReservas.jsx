@@ -1,12 +1,13 @@
 // client/src/pages/MisReservas.jsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useReservas } from "./hooks/useReservas";
 import ReservasSidebar from "./components/reservas/ReservasSidebar";
 import ReservasPanel from "./components/reservas/ReservasPanel";
 import ConfirmacionReservaModal from "./components/reservas/ConfirmacionReservaModal";
 import VisualizarPuestoModal from "./components/reservas/VisualizarPuestoModal";
+import MapaReservaModal from "./components/reservas/MapaReservaModal";
 import AyudaReservas from "./components/reservas/AyudaReservas";
 
 export default function MisReservas() {
@@ -17,6 +18,10 @@ export default function MisReservas() {
   const [modalConfirmacion, setModalConfirmacion] = useState(false);
   const [reservaPendiente, setReservaPendiente] = useState(null);
   const [modalVisualizacion, setModalVisualizacion] = useState(false);
+  const [modalMapaReserva, setModalMapaReserva] = useState(false);
+  const [reservaMapaSeleccionada, setReservaMapaSeleccionada] = useState(null);
+
+  const reservasActivas = reservasData.reservas.filter((r) => r.ReservaActiva).length;
 
   const handleSolicitarReserva = async (fechaSeleccionada) => {
     try {
@@ -28,20 +33,11 @@ export default function MisReservas() {
         return;
       }
 
-      console.log(
-        "📍 Solicitando puestos disponibles para fecha:",
-        fechaSeleccionada,
-      );
-      console.log("📍 Piso seleccionado:", reservasData.pisoSeleccionado);
-
       const token = localStorage.getItem("token");
-
       const fechaFormateada = new Date(fechaSeleccionada)
         .toISOString()
         .split("T")[0];
-      const url = `${API}/api/reservas/disponibles/${fechaFormateada}`;
-
-      console.log("📍 URL:", url);
+      const url = `${API}/api/reservas/disponibles/${fechaFormateada}?idPiso=${reservasData.pisoSeleccionado.IDPiso}`;
 
       const res = await fetch(url, {
         headers: {
@@ -49,22 +45,16 @@ export default function MisReservas() {
         },
       });
 
-      console.log("📍 Response status:", res.status);
-      console.log("📍 Response ok:", res.ok);
-
       if (!res.ok) {
         const errorText = await res.text();
-        console.error("❌ Error response:", errorText);
         throw new Error(`HTTP ${res.status}: ${errorText}`);
       }
 
       const puestosDisponibles = await res.json();
-      console.log("✅ Puestos disponibles:", puestosDisponibles);
-
       if (!puestosDisponibles || puestosDisponibles.length === 0) {
         reservasData.setMensaje({
           tipo: "error",
-          texto: "✗ No hay puestos disponibles para esta fecha",
+          texto: "✗ No hay puestos disponibles en tu piso para esa fecha",
         });
         return;
       }
@@ -79,8 +69,7 @@ export default function MisReservas() {
 
       setModalConfirmacion(true);
     } catch (error) {
-      console.error("❌ Error completo:", error);
-      console.error("❌ Stack trace:", error.stack);
+      console.error("Error al solicitar reserva:", error);
       reservasData.setMensaje({
         tipo: "error",
         texto: `✗ ${error.message}`,
@@ -90,8 +79,6 @@ export default function MisReservas() {
 
   const handleConfirmarReserva = async () => {
     try {
-      console.log("📍 Confirmando reserva con:", reservaPendiente);
-
       if (!reservaPendiente?.puestoAsignado?.IdPuestoTrabajo) {
         throw new Error("No se pudo obtener el ID del puesto");
       }
@@ -101,16 +88,10 @@ export default function MisReservas() {
       }
 
       const token = localStorage.getItem("token");
-
       const fechaFormateada =
         reservaPendiente.fecha instanceof Date
           ? reservaPendiente.fecha.toISOString().split("T")[0]
           : reservaPendiente.fecha;
-
-      console.log("📍 Datos a enviar:", {
-        idPuestoTrabajo: reservaPendiente.puestoAsignado.IdPuestoTrabajo,
-        fecha: fechaFormateada,
-      });
 
       const res = await fetch(`${API}/api/reservas`, {
         method: "POST",
@@ -126,12 +107,9 @@ export default function MisReservas() {
         }),
       });
 
-      console.log("📍 Response status:", res.status);
-
       if (!res.ok) {
         const errorData = await res.json();
-        console.error("❌ Error del servidor:", errorData);
-        throw new Error("Error al crear la reserva");
+        throw new Error(errorData.error || "Error al crear la reserva");
       }
 
       reservasData.setMensaje({
@@ -156,6 +134,28 @@ export default function MisReservas() {
     setModalVisualizacion(true);
   };
 
+
+  const handleVerMapaReserva = (reserva) => {
+    if (!reserva) return;
+
+    const pisoReserva = reservasData.pisos.find((piso) => {
+      if (reserva.IdPiso != null) {
+        return String(piso.IDPiso) === String(reserva.IdPiso);
+      }
+      if (reserva.NumeroPiso != null) {
+        return String(piso.NumeroPiso) === String(reserva.NumeroPiso);
+      }
+      return false;
+    }) || null;
+
+    setReservaMapaSeleccionada({
+      ...reserva,
+      __pisoSeleccionado: pisoReserva,
+    });
+    setModalMapaReserva(true);
+  };
+
+
   if (reservasData.loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -179,6 +179,14 @@ export default function MisReservas() {
               <p className="text-sm text-gray-600 mt-1">
                 Gestiona tus reservas de puestos de trabajo
               </p>
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                  🧭 Piso activo: {reservasData.pisoSeleccionado ? `Piso ${reservasData.pisoSeleccionado.NumeroPiso}` : "Sin seleccionar"}
+                </span>
+                <span className="px-2 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
+                  ✅ Reservas activas: {reservasActivas}
+                </span>
+              </div>
             </div>
             <button
               onClick={() => navigate("/dashboard")}
@@ -190,11 +198,31 @@ export default function MisReservas() {
         </div>
       </header>
 
+
+      {reservasData.pisos.length === 0 && (
+        <div className="mx-6 mt-4 p-4 rounded-xl bg-yellow-50 border border-yellow-200 text-yellow-800">
+          <p className="font-medium">
+            ⚠️ No se encontraron pisos con puestos disponibles para reservar.
+          </p>
+        </div>
+      )}
+
+      {["global", "all-pisos"].includes(reservasData.scopePisos) && reservasData.pisos.length > 0 && (
+        <div className="mx-6 mt-4 p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-800">
+          <p className="font-medium">
+            ℹ️ No encontramos configuración completa por área, así que te mostramos pisos disponibles para que puedas reservar.
+          </p>
+        </div>
+      )}
+
+            <AnimatePresence>
       {reservasData.mensaje && (
         <motion.div
+          key={reservasData.mensaje.texto}
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.2 }}
           className={`mx-6 mt-4 p-4 rounded-xl ${
             reservasData.mensaje.tipo === "success"
               ? "bg-green-50 border border-green-200 text-green-800"
@@ -204,12 +232,19 @@ export default function MisReservas() {
           <p className="font-medium">{reservasData.mensaje.texto}</p>
         </motion.div>
       )}
+      </AnimatePresence>
 
-      <main className="p-6">
+      <motion.main
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25 }}
+        className="p-6"
+      >
         {/* ✅ AGREGAR: Componente de ayuda contextual */}
         <AyudaReservas
           pisos={reservasData.pisos}
           onSeleccionarPiso={reservasData.setPisoSeleccionado}
+          scopePisos={reservasData.scopePisos}
         />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -217,6 +252,7 @@ export default function MisReservas() {
             pisos={reservasData.pisos}
             pisoSeleccionado={reservasData.pisoSeleccionado}
             onSeleccionarPiso={reservasData.setPisoSeleccionado}
+            scopePisos={reservasData.scopePisos}
           />
 
           <ReservasPanel
@@ -225,9 +261,10 @@ export default function MisReservas() {
             loadingReservas={reservasData.loadingReservas}
             onSolicitarReserva={handleSolicitarReserva}
             onCancelarReserva={reservasData.cancelarReserva}
+            onVerMapaReserva={handleVerMapaReserva}
           />
         </div>
-      </main>
+      </motion.main>
 
       {modalConfirmacion && reservaPendiente && (
         <ConfirmacionReservaModal
@@ -250,6 +287,22 @@ export default function MisReservas() {
           onClose={() => setModalVisualizacion(false)}
         />
       )}
+
+      {modalMapaReserva && reservaMapaSeleccionada && (
+        <MapaReservaModal
+          reserva={reservaMapaSeleccionada}
+          pisoSeleccionado={reservaMapaSeleccionada.__pisoSeleccionado || null}
+          areaAsignada={{
+            NombreArea: reservaMapaSeleccionada.NombreArea || "Área asignada",
+            IdArea: reservaMapaSeleccionada.IdArea || null,
+          }}
+          onClose={() => {
+            setModalMapaReserva(false);
+            setReservaMapaSeleccionada(null);
+          }}
+        />
+      )}
+
     </div>
   );
 }
