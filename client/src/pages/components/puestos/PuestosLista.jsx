@@ -17,6 +17,13 @@ export default function PuestosLista({
     const clasificacion = clasificaciones.find(c => c.IdClasificacion === idClasificacion);  
     return clasificacion?.Descripcion || "Sin clasificar";  
   };  
+
+  const totalDisponibles = puestos.filter((p) => p.Disponible === "SI").length;
+  const totalNoDisponibles = puestos.length - totalDisponibles;
+  const totalMapeados = puestos.filter((p) => p.TieneMapeo).length;
+  const totalMapeadosDisponibles = puestos.filter(
+    (p) => p.TieneMapeo && p.Disponible === "SI",
+  ).length;
   
   // Filtrar puestos  
   const puestosFiltrados = puestos.filter(puesto => {  
@@ -77,7 +84,7 @@ export default function PuestosLista({
                 : "bg-gray-100 text-gray-700 hover:bg-gray-200"  
             }`}  
           >  
-            Mapeados ({puestos.filter(p => p.TieneMapeo).length})  
+            Mapeados ({totalMapeados})  
           </button>  
           <button  
             onClick={() => setFiltroMapeo("sin-mapear")}  
@@ -90,6 +97,18 @@ export default function PuestosLista({
             Sin mapear ({puestos.filter(p => !p.TieneMapeo).length})  
           </button>  
         </div>  
+
+        <div className="flex flex-wrap gap-2 text-xs"> 
+          <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700"> 
+            Disponibles: {totalDisponibles}
+          </span>
+          <span className="px-2 py-1 rounded-full bg-rose-50 text-rose-700"> 
+            No disponibles: {totalNoDisponibles}
+          </span>
+          <span className="px-2 py-1 rounded-full bg-blue-50 text-blue-700"> 
+            Mapeados disponibles: {totalMapeadosDisponibles} / {totalMapeados}
+          </span>
+        </div>
       </div>  
   
       {loadingPuestos ? (  
