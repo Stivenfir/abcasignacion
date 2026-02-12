@@ -1,5 +1,5 @@
 // client/src/components/areas/MapaCompletoModal.jsx
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 
 export default function MapaCompletoModal({
@@ -14,6 +14,72 @@ export default function MapaCompletoModal({
   const [planoUrl, setPlanoUrl] = useState(null);
 
   const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
+  const sincronizarCanvasConImagen = useCallback(() => {
+    if (!canvasPreviewRef.current || !imagenPreviewRef.current) return;
+
+    const canvas = canvasPreviewRef.current;
+    const imagen = imagenPreviewRef.current;
+    const width = imagen.clientWidth;
+    const height = imagen.clientHeight;
+
+    if (!width || !height) return;
+
+    canvas.width = width;
+    canvas.height = height;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+  }, []);
+
+  const dibujarTodasLasDelimitaciones = useCallback(() => {
+    if (!canvasPreviewRef.current) return;
+
+    const canvas = canvasPreviewRef.current;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const colors = [
+      { stroke: "#3B82F6", fill: "rgba(59, 130, 246, 0.15)" },
+      { stroke: "#10B981", fill: "rgba(16, 185, 129, 0.15)" },
+      { stroke: "#F59E0B", fill: "rgba(245, 158, 11, 0.15)" },
+      { stroke: "#EF4444", fill: "rgba(239, 68, 68, 0.15)" },
+      { stroke: "#8B5CF6", fill: "rgba(139, 92, 246, 0.15)" },
+      { stroke: "#EC4899", fill: "rgba(236, 72, 153, 0.15)" },
+    ];
+
+    areasPiso.forEach((areaPiso) => {
+      const area = areas.find((a) => a.IdArea === areaPiso.IdArea);
+      const delimitacionesArea = delimitaciones[areaPiso.IdAreaPiso] || [];
+      const color = colors[areaPiso.IdArea % colors.length];
+
+      delimitacionesArea.forEach((delimitacion) => {
+        ctx.strokeStyle = color.stroke;
+        ctx.lineWidth = 3;
+        ctx.fillStyle = color.fill;
+
+        ctx.fillRect(
+          Number(delimitacion.PosicionX),
+          Number(delimitacion.PosicionY),
+          Number(delimitacion.Ancho),
+          Number(delimitacion.Alto),
+        );
+        ctx.strokeRect(
+          Number(delimitacion.PosicionX),
+          Number(delimitacion.PosicionY),
+          Number(delimitacion.Ancho),
+          Number(delimitacion.Alto),
+        );
+
+        ctx.fillStyle = color.stroke;
+        ctx.font = "14px Arial";
+        ctx.fillText(
+          area?.NombreArea || `Área ${areaPiso.IdArea}`,
+          Number(delimitacion.PosicionX) + 5,
+          Number(delimitacion.PosicionY) + 20,
+        );
+      });
+    });
+  }, [areas, areasPiso, delimitaciones]);
 
   // Cargar plano al montar el componente
   useEffect(() => {
@@ -34,66 +100,26 @@ export default function MapaCompletoModal({
     if (pisoSeleccionado?.IDPiso) {
       cargarPlano();
     }
-  }, [pisoSeleccionado]);
+  }, [API, pisoSeleccionado]);
 
   useEffect(() => {
     if (imagenPreviewRef.current && canvasPreviewRef.current && planoUrl) {
+      sincronizarCanvasConImagen();
       dibujarTodasLasDelimitaciones();
     }
-  }, [areasPiso, delimitaciones, planoUrl]);
+  }, [planoUrl, sincronizarCanvasConImagen, dibujarTodasLasDelimitaciones]);
 
-  const dibujarTodasLasDelimitaciones = () => {
-    if (!canvasPreviewRef.current) return;
+  useEffect(() => {
+    if (!imagenPreviewRef.current) return;
 
-    const canvas = canvasPreviewRef.current;
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    const colors = [
-      { stroke: "#3B82F6", fill: "rgba(59, 130, 246, 0.15)" },
-      { stroke: "#10B981", fill: "rgba(16, 185, 129, 0.15)" },
-      { stroke: "#F59E0B", fill: "rgba(245, 158, 11, 0.15)" },
-      { stroke: "#EF4444", fill: "rgba(239, 68, 68, 0.15)" },
-      { stroke: "#8B5CF6", fill: "rgba(139, 92, 246, 0.15)" },
-      { stroke: "#EC4899", fill: "rgba(236, 72, 153, 0.15)" },
-    ];
-
-    // Dibujar todas las delimitaciones de todas las áreas
-    areasPiso.forEach((areaPiso) => {
-      const area = areas.find((a) => a.IdArea === areaPiso.IdArea);
-      const delimitacionesArea = delimitaciones[areaPiso.IdAreaPiso] || [];
-      const color = colors[areaPiso.IdArea % colors.length];
-
-      // Dibujar cada delimitación del área
-      delimitacionesArea.forEach((delimitacion) => {
-        ctx.strokeStyle = color.stroke;
-        ctx.lineWidth = 3;
-        ctx.fillStyle = color.fill;
-
-        ctx.fillRect(
-          Number(delimitacion.PosicionX),
-          Number(delimitacion.PosicionY),
-          Number(delimitacion.Ancho),
-          Number(delimitacion.Alto),
-        );
-        ctx.strokeRect(
-          Number(delimitacion.PosicionX),
-          Number(delimitacion.PosicionY),
-          Number(delimitacion.Ancho),
-          Number(delimitacion.Alto),
-        );
-
-        // Etiqueta con nombre del área
-        ctx.fillStyle = color.stroke;
-        ctx.font = "14px Arial";
-        ctx.fillText(
-          area?.NombreArea || `Área ${areaPiso.IdArea}`,
-          Number(delimitacion.PosicionX) + 5,
-          Number(delimitacion.PosicionY) + 20,
-        );
-      });
+    const observer = new ResizeObserver(() => {
+      sincronizarCanvasConImagen();
+      dibujarTodasLasDelimitaciones();
     });
-  };
+
+    observer.observe(imagenPreviewRef.current);
+    return () => observer.disconnect();
+  }, [planoUrl, sincronizarCanvasConImagen, dibujarTodasLasDelimitaciones]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -132,12 +158,9 @@ export default function MapaCompletoModal({
                 src={planoUrl}
                 alt="Plano del piso"
                 className="max-w-full h-auto border border-gray-300 rounded"
-                onLoad={(e) => {
-                  if (canvasPreviewRef.current) {
-                    canvasPreviewRef.current.width = e.target.naturalWidth;
-                    canvasPreviewRef.current.height = e.target.naturalHeight;
-                    dibujarTodasLasDelimitaciones();
-                  }
+                onLoad={() => {
+                  sincronizarCanvasConImagen();
+                  dibujarTodasLasDelimitaciones();
                 }}
               />
               <canvas
