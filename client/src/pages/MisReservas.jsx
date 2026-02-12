@@ -146,7 +146,7 @@ export default function MisReservas() {
         return String(piso.NumeroPiso) === String(reserva.NumeroPiso);
       }
       return false;
-    }) || reservasData.pisoSeleccionado;
+    }) || null;
 
     setReservaMapaSeleccionada({
       ...reserva,

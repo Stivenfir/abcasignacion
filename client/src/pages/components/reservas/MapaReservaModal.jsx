@@ -94,8 +94,13 @@ export default function MapaReservaModal({
   
   useEffect(() => {  
     if (pisoSeleccionado?.IDPiso) {  
+      setLoading(true);
       cargarPlano();  
-    }  
+      return;
+    }
+
+    setPlanoUrl(null);
+    setLoading(false);
   }, [pisoSeleccionado]);  
 
   useEffect(() => {
@@ -184,11 +189,17 @@ export default function MapaReservaModal({
     let x = coords.x;
     let y = coords.y;
 
-    // Soportar ambos sistemas: coordenada en display (mapeo) o en natural (imagen original)
-    const pareceNatural = x > metrics.displayWidth || y > metrics.displayHeight;
-    if (pareceNatural && metrics.naturalWidth && metrics.naturalHeight) {
-      x = (x * metrics.displayWidth) / metrics.naturalWidth;
-      y = (y * metrics.displayHeight) / metrics.naturalHeight;
+    // Soportar 3 sistemas: normalizado (0..1), display y natural
+    const esNormalizado = x >= 0 && x <= 1 && y >= 0 && y <= 1;
+    if (esNormalizado) {
+      x = x * metrics.displayWidth;
+      y = y * metrics.displayHeight;
+    } else {
+      const pareceNatural = x > metrics.displayWidth || y > metrics.displayHeight;
+      if (pareceNatural && metrics.naturalWidth && metrics.naturalHeight) {
+        x = (x * metrics.displayWidth) / metrics.naturalWidth;
+        y = (y * metrics.displayHeight) / metrics.naturalHeight;
+      }
     }
 
     x = Math.max(0, Math.min(metrics.displayWidth, x));
@@ -290,6 +301,10 @@ export default function MapaReservaModal({
             <div className="flex justify-center py-16">  
               <div className="w-16 h-16 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>  
             </div>  
+          ) : !pisoSeleccionado?.IDPiso ? (
+            <div className="p-4 rounded-xl bg-yellow-50 border border-yellow-200 text-yellow-800">
+              Esta reserva no trae piso asociado. No podemos ubicarla en un plano sin adivinar piso.
+            </div>
           ) : !planoUrl ? (
             <div className="p-4 rounded-xl bg-yellow-50 border border-yellow-200 text-yellow-800">
               No se encontró plano para este piso.
