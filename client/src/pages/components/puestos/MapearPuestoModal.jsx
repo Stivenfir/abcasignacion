@@ -152,8 +152,8 @@ export default function MapearPuestoModal({
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
 
-    const x = Math.round((e.clientX - rect.left) * scaleX);
-    const y = Math.round((e.clientY - rect.top) * scaleY);
+    const x = Number((((e.clientX - rect.left) * scaleX)).toFixed(2));
+    const y = Number((((e.clientY - rect.top) * scaleY)).toFixed(2));
 
     // Validar que esté dentro del área delimitada
     const dentroDeArea = delimitaciones.some(
@@ -194,7 +194,7 @@ export default function MapearPuestoModal({
 
     // 3️⃣ Dibujar puestos existentes en gris
     puestosExistentes.forEach((p) => {
-      if (p.UbicacionX && p.UbicacionY) {
+      if (p.UbicacionX != null && p.UbicacionY != null) {
         ctx.beginPath();
         ctx.arc(Number(p.UbicacionX), Number(p.UbicacionY), 8, 0, 2 * Math.PI);
         ctx.fillStyle = "#9CA3AF";
@@ -212,25 +212,24 @@ export default function MapearPuestoModal({
       }
     });
 
-    // 4️⃣ Dibujar punto actual con sombra
-    ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetX = 2;
-    ctx.shadowOffsetY = 2;
+    // 4️⃣ Dibujar punto actual
+    ctx.beginPath();
+    ctx.arc(x, y, 12, 0, 2 * Math.PI);
+    ctx.strokeStyle = "rgba(59, 130, 246, 0.5)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
 
     ctx.beginPath();
-    ctx.arc(x, y, 10, 0, 2 * Math.PI);
+    ctx.arc(x, y, 8, 0, 2 * Math.PI);
     ctx.fillStyle = "#3B82F6";
     ctx.fill();
-
-    ctx.shadowColor = "transparent"; // Reset shadow
-    ctx.strokeStyle = "#1E40AF";
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = "#1D4ED8";
+    ctx.lineWidth = 2;
     ctx.stroke();
 
     // Dibujar número del puesto actual
     ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 12px Arial";
+    ctx.font = "bold 11px Arial";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(puestoAMapear.NoPuesto, x, y);
@@ -255,7 +254,7 @@ export default function MapearPuestoModal({
 
       dibujarDelimitaciones();
       puestosExistentes.forEach((p) => {
-        if (p.UbicacionX && p.UbicacionY) {
+        if (p.UbicacionX != null && p.UbicacionY != null) {
           ctx.beginPath();
           ctx.arc(
             Number(p.UbicacionX),
@@ -311,7 +310,7 @@ export default function MapearPuestoModal({
 
             // Dibujar puestos existentes
             puestosExistentes.forEach((p) => {
-              if (p.UbicacionX && p.UbicacionY) {
+              if (p.UbicacionX != null && p.UbicacionY != null) {
                 ctx.beginPath();
                 ctx.arc(
                   Number(p.UbicacionX),
@@ -390,7 +389,7 @@ export default function MapearPuestoModal({
 
         // Dibujar puestos existentes
         puestosExistentes.forEach((p) => {
-          if (p.UbicacionX && p.UbicacionY) {
+          if (p.UbicacionX != null && p.UbicacionY != null) {
             ctx.beginPath();
             ctx.arc(
               Number(p.UbicacionX),

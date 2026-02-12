@@ -144,7 +144,7 @@ export default function PuestoModal({
 
       // Dibujar puestos existentes
       puestosExistentes.forEach((p) => {
-        if (p.UbicacionX && p.UbicacionY) {
+        if (p.UbicacionX != null && p.UbicacionY != null) {
           ctx.beginPath();
           ctx.arc(
             Number(p.UbicacionX),
@@ -225,8 +225,8 @@ export default function PuestoModal({
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    const x = Math.round((e.clientX - rect.left) * scaleX);
-    const y = Math.round((e.clientY - rect.top) * scaleY);
+    const x = Number((((e.clientX - rect.left) * scaleX)).toFixed(2));
+    const y = Number((((e.clientY - rect.top) * scaleY)).toFixed(2));
 
     // Validar que esté dentro del área delimitada
     const dentroDeArea = delimitaciones.some(
@@ -316,7 +316,7 @@ export default function PuestoModal({
 
     // 3️⃣ Dibujar puestos existentes
     puestosExistentes.forEach((p) => {
-      if (p.UbicacionX && p.UbicacionY) {
+      if (p.UbicacionX != null && p.UbicacionY != null) {
         ctx.beginPath();
         ctx.arc(Number(p.UbicacionX), Number(p.UbicacionY), 8, 0, 2 * Math.PI);
         ctx.fillStyle = "#9CA3AF";
@@ -333,17 +333,23 @@ export default function PuestoModal({
       }
     });
 
-    // 4️⃣ Dibujar punto actual
+    // 4️⃣ Dibujar punto actual (mismo centro que preview/mapa)
     ctx.beginPath();
-    ctx.arc(puntoSeleccionado.x, puntoSeleccionado.y, 15, 0, 2 * Math.PI);
-    ctx.fillStyle = "rgba(59, 130, 246, 0.3)";
-    ctx.fill();
-    ctx.strokeStyle = "#3B82F6";
-    ctx.lineWidth = 3;
+    ctx.arc(puntoSeleccionado.x, puntoSeleccionado.y, 12, 0, 2 * Math.PI);
+    ctx.strokeStyle = "rgba(59, 130, 246, 0.5)";
+    ctx.lineWidth = 2;
     ctx.stroke();
 
-    ctx.fillStyle = "#1E40AF";
-    ctx.font = "bold 14px Arial";
+    ctx.beginPath();
+    ctx.arc(puntoSeleccionado.x, puntoSeleccionado.y, 8, 0, 2 * Math.PI);
+    ctx.fillStyle = "#3B82F6";
+    ctx.fill();
+    ctx.strokeStyle = "#1D4ED8";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 11px Arial";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(
@@ -652,7 +658,7 @@ export default function PuestoModal({
                           dibujarDelimitaciones();
 
                           puestosExistentes.forEach((p) => {
-                            if (p.UbicacionX && p.UbicacionY) {
+                            if (p.UbicacionX != null && p.UbicacionY != null) {
                               ctx.beginPath();
                               ctx.arc(
                                 Number(p.UbicacionX),

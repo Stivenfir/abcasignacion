@@ -64,7 +64,7 @@ export default function PreviewMapaPuestos({
     ctx.setLineDash([]);
 
     puestos.forEach((puesto) => {
-      if (!puesto.UbicacionX || !puesto.UbicacionY) return;
+      if (puesto.UbicacionX == null || puesto.UbicacionY == null) return;
 
       let color = puesto.Disponible === "SI" ? "#10B981" : "#EF4444";
       if (puesto.AsignadoA) color = "#F59E0B";
