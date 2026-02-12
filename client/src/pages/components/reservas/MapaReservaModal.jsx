@@ -58,6 +58,15 @@ function toDisplayPoint(valueX, valueY, metrics) {
   const y = Number(valueY);
   if (!Number.isFinite(x) || !Number.isFinite(y) || !metrics) return null;
 
+  const coordenadasNormalizadas = x >= 0 && y >= 0 && x <= 1 && y <= 1;
+  if (coordenadasNormalizadas) {
+    return {
+      x: x * metrics.displayWidth,
+      y: y * metrics.displayHeight,
+      source: "normalized",
+    };
+  }
+
   const yaEnDisplay = x >= 0 && y >= 0 && x <= metrics.displayWidth && y <= metrics.displayHeight;
   if (yaEnDisplay) {
     return { x, y, source: "display" };
@@ -460,16 +469,7 @@ export default function MapaReservaModal({
       candidatos.push({ x: puntoBase.x, y: puntoBase.y, tipo: puntoBase.source });
     }
 
-    // 2) Coordenadas normalizadas 0..1
-    if (coords.x >= 0 && coords.x <= 1 && coords.y >= 0 && coords.y <= 1) {
-      candidatos.push({
-        x: coords.x * metrics.displayWidth,
-        y: coords.y * metrics.displayHeight,
-        tipo: "normalizado",
-      });
-    }
-
-    // 3) Coordenadas guardadas en escala natural de la imagen
+    // 2) Coordenadas guardadas en escala natural de la imagen
     candidatos.push({
       x: (coords.x * metrics.displayWidth) / metrics.naturalWidth,
       y: (coords.y * metrics.displayHeight) / metrics.naturalHeight,
