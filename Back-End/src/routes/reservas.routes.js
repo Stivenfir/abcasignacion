@@ -39,6 +39,9 @@ function normalizeAreaId(rawArea) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+function esPuestoDisponible(puesto) {
+  return String(puesto?.Disponible || "").trim().toUpperCase() === "SI";
+}
 
 
 function logAuditoria(accion, usuario, detalles) {        
@@ -119,7 +122,7 @@ router.get("/pisos-habilitados", authenticateToken, async (req, res) => {
     }
 
     const data = JSON.parse(Rta.trim())["data"];
-    const puestos = Array.isArray(data) ? data : [];
+    const puestos = (Array.isArray(data) ? data : []).filter(esPuestoDisponible);
 
     const pisosMap = new Map();
     for (const puesto of puestos) {
@@ -196,6 +199,8 @@ router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {
     if (!Array.isArray(D)) {            
       return res.json([]);            
     }      
+
+    D = D.filter(esPuestoDisponible);
       
     // ✅ Eliminar duplicados basándose en IdPuestoTrabajo    
     const puestosUnicos = [];    
@@ -272,7 +277,7 @@ router.get("/disponibilidad-area", authenticateToken, async (req, res) => {
   
     var S = Rta.trim();  
     var D = JSON.parse(S.trim())["data"];  
-    const puestos = Array.isArray(D) ? D : [];
+    const puestos = (Array.isArray(D) ? D : []).filter(esPuestoDisponible);
     const cantidadPuestos = puestos.filter((p) => String(p.IdPiso) === String(idPiso)).length;
   
     logAuditoria('CONSULTAR_DISPONIBILIDAD_AREA', usuario, {  
