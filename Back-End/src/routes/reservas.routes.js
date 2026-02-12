@@ -43,6 +43,16 @@ function esPuestoDisponible(puesto) {
   return String(puesto?.Disponible || "").trim().toUpperCase() === "SI";
 }
 
+function esPuestoMapeado(puesto) {
+  return puesto?.TieneMapeo === true ||
+    puesto?.TieneMapeo === 1 ||
+    String(puesto?.TieneMapeo || "").trim() === "1";
+}
+
+function esPuestoReservable(puesto) {
+  return esPuestoDisponible(puesto) && esPuestoMapeado(puesto);
+}
+
 
 function logAuditoria(accion, usuario, detalles) {        
   const timestamp = new Date().toISOString();        
@@ -122,7 +132,7 @@ router.get("/pisos-habilitados", authenticateToken, async (req, res) => {
     }
 
     const data = JSON.parse(Rta.trim())["data"];
-    const puestos = (Array.isArray(data) ? data : []).filter(esPuestoDisponible);
+    const puestos = (Array.isArray(data) ? data : []).filter(esPuestoReservable);
 
     const pisosMap = new Map();
     for (const puesto of puestos) {
@@ -200,7 +210,7 @@ router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {
       return res.json([]);            
     }      
 
-    D = D.filter(esPuestoDisponible);
+    D = D.filter(esPuestoReservable);
       
     // ✅ Eliminar duplicados basándose en IdPuestoTrabajo    
     const puestosUnicos = [];    
@@ -277,7 +287,7 @@ router.get("/disponibilidad-area", authenticateToken, async (req, res) => {
   
     var S = Rta.trim();  
     var D = JSON.parse(S.trim())["data"];  
-    const puestos = (Array.isArray(D) ? D : []).filter(esPuestoDisponible);
+    const puestos = (Array.isArray(D) ? D : []).filter(esPuestoReservable);
     const cantidadPuestos = puestos.filter((p) => String(p.IdPiso) === String(idPiso)).length;
   
     logAuditoria('CONSULTAR_DISPONIBILIDAD_AREA', usuario, {  
