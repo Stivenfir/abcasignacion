@@ -9,6 +9,7 @@ export function useReservas() {
   const [loading, setLoading] = useState(true);
   const [loadingReservas, setLoadingReservas] = useState(false);
   const [mensaje, setMensaje] = useState(null);
+  const [scopePisos, setScopePisos] = useState("area");
 
   useEffect(() => {
     cargarDatos();
@@ -31,9 +32,15 @@ export function useReservas() {
 
       if (!resPisos.ok) throw new Error("Error al cargar pisos habilitados");
       const dataPisos = await resPisos.json();
-      const pisosHabilitados = Array.isArray(dataPisos) ? dataPisos : [];
+      const pisosHabilitados = Array.isArray(dataPisos)
+        ? dataPisos
+        : Array.isArray(dataPisos?.pisos)
+          ? dataPisos.pisos
+          : [];
+      const scope = dataPisos?.scope === "global" ? "global" : "area";
 
       setPisos(pisosHabilitados);
+      setScopePisos(scope);
 
       // Si el piso seleccionado ya no está habilitado, seleccionar el primero
       setPisoSeleccionado((prev) => {
@@ -106,5 +113,6 @@ export function useReservas() {
     setPisoSeleccionado,
     setMensaje,
     cancelarReserva,
+    scopePisos,
   };
 }
