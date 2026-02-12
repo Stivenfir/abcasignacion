@@ -54,6 +54,24 @@ function getReservaIdPuesto(raw) {
   const id = Number(idRaw);
   return Number.isFinite(id) ? id : null;
 }
+
+function syncCanvasWithImage(canvas, image) {
+  if (!canvas || !image) return null;
+
+  const displayWidth = image.clientWidth || image.width || 0;
+  const displayHeight = image.clientHeight || image.height || 0;
+  const naturalWidth = image.naturalWidth || displayWidth;
+  const naturalHeight = image.naturalHeight || displayHeight;
+
+  if (!displayWidth || !displayHeight || !naturalWidth || !naturalHeight) return null;
+
+  canvas.width = naturalWidth;
+  canvas.height = naturalHeight;
+  canvas.style.width = `${displayWidth}px`;
+  canvas.style.height = `${displayHeight}px`;
+
+  return { naturalWidth, naturalHeight, displayWidth, displayHeight };
+}
   
 export default function MapaReservaModal({  
   reserva,  
@@ -147,48 +165,71 @@ export default function MapaReservaModal({
     }  
   };  
   
-  const dibujarPuestoAsignado = () => {  
+  const dibujarPuestoAsignado = () => {
     const coords = getReservaCoords(reservaRender);
+    const canvas = canvasRef.current;
+    const imagen = imagenRef.current;
 
-    if (!canvasRef.current || !coords.hasCoords)
-      return;  
-  
-    const canvas = canvasRef.current;  
-    const ctx = canvas.getContext("2d");  
-    ctx.clearRect(0, 0, canvas.width, canvas.height);  
-  
-    const { x, y } = coords;
-  
-    // Dibujar círculo verde brillante para el puesto asignado  
-    ctx.shadowColor = 'rgba(16, 185, 129, 0.5)';  
-    ctx.shadowBlur = 10;  
-    ctx.shadowOffsetX = 0;  
-    ctx.shadowOffsetY = 0;  
-  
-    ctx.beginPath();  
-    ctx.arc(x, y, 15, 0, 2 * Math.PI);  
-    ctx.fillStyle = "#10B981";  
-    ctx.fill();  
-  
-    ctx.shadowColor = 'transparent';  
-    ctx.strokeStyle = "#059669";  
-    ctx.lineWidth = 3;  
-    ctx.stroke();  
-  
-    // Dibujar número del puesto  
-    ctx.fillStyle = "#FFFFFF";  
-    ctx.font = "bold 14px Arial";  
-    ctx.textAlign = "center";  
-    ctx.textBaseline = "middle";  
-    ctx.fillText(getReservaPuestoLabel(reservaRender) ?? "#", x, y);  
-  
-    // Dibujar pulso animado  
-    ctx.beginPath();  
-    ctx.arc(x, y, 25, 0, 2 * Math.PI);  
-    ctx.strokeStyle = "rgba(16, 185, 129, 0.3)";  
-    ctx.lineWidth = 2;  
-    ctx.stroke();  
-  };  
+    if (!canvas || !imagen) return;
+
+    const metrics = syncCanvasWithImage(canvas, imagen);
+    if (!metrics) return;
+
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (!coords.hasCoords) return;
+
+    const scaleX = metrics.naturalWidth / metrics.displayWidth;
+    const scaleY = metrics.naturalHeight / metrics.displayHeight;
+
+    const x = coords.x * scaleX;
+    const y = coords.y * scaleY;
+
+    // Dibujar círculo verde brillante para el puesto asignado
+    ctx.shadowColor = "rgba(16, 185, 129, 0.5)";
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+
+    ctx.beginPath();
+    ctx.arc(x, y, 15, 0, 2 * Math.PI);
+    ctx.fillStyle = "#10B981";
+    ctx.fill();
+
+    ctx.shadowColor = "transparent";
+    ctx.strokeStyle = "#059669";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Dibujar número del puesto
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 14px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(getReservaPuestoLabel(reservaRender) ?? "#", x, y);
+
+    // Dibujar pulso animado
+    ctx.beginPath();
+    ctx.arc(x, y, 25, 0, 2 * Math.PI);
+    ctx.strokeStyle = "rgba(16, 185, 129, 0.3)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  };
+
+  useEffect(() => {
+    if (planoUrl) {
+      dibujarPuestoAsignado();
+    }
+  }, [planoUrl, reservaRender]);
+
+  useEffect(() => {
+    if (!planoUrl) return;
+
+    const onResize = () => dibujarPuestoAsignado();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [planoUrl, reservaRender]);
   
   const coordsReserva = getReservaCoords(reservaRender);
   const puestoLabel = getReservaPuestoLabel(reservaRender) ?? "N/D";
@@ -258,13 +299,9 @@ export default function MapaReservaModal({
                   src={planoUrl}  
                   alt="Plano del piso"  
                   className="max-w-full h-auto block"  
-                  onLoad={(e) => {  
-                    if (canvasRef.current) {  
-                      canvasRef.current.width = e.target.width;  
-                      canvasRef.current.height = e.target.height;  
-                      dibujarPuestoAsignado();  
-                    }  
-                  }}  
+                  onLoad={() => {
+                    dibujarPuestoAsignado();
+                  }}
                 />  
                 <canvas  
                   ref={canvasRef}  
