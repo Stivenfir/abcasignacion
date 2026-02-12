@@ -61,7 +61,8 @@ export default function Login() {
       } else {
         setError(data?.message || "Usuario o contraseña incorrectos");
       }
-    } catch {
+    } catch(error) {
+      console.error('Error:', error); 
       setError("No se pudo conectar con el servidor. Intenta de nuevo.");
     } finally {
       setLoading(false);
