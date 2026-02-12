@@ -1,6 +1,14 @@
 // client/src/pages/components/puestos/PuestoModal.jsx
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
+import {
+  syncCanvasToImage,
+  getCanvasPointFromEvent,
+  drawGrid as drawGridCanvas,
+  drawDelimitaciones as drawDelimitacionesCanvas,
+  drawPuesto,
+  drawSelectedPuesto,
+} from "../../utils/mapCanvas";
 
 export default function PuestoModal({
   pisoSeleccionado,
@@ -31,21 +39,7 @@ export default function PuestoModal({
   const containerRef = useRef(null);
 
   const sincronizarCanvasConImagen = useCallback(() => {
-    if (!canvasRef.current || !imagenRef.current) return;
-
-    const canvas = canvasRef.current;
-    const imagen = imagenRef.current;
-    const width = imagen.clientWidth;
-    const height = imagen.clientHeight;
-
-    if (!width || !height) return;
-
-    // Las delimitaciones se guardan en este mismo espacio renderizado,
-    // así que el canvas debe usar estas dimensiones para no descuadrarse.
-    canvas.width = width;
-    canvas.height = height;
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
+    syncCanvasToImage(canvasRef.current, imagenRef.current);
   }, []);
 
   // Cargar plano al montar
@@ -222,11 +216,7 @@ export default function PuestoModal({
     if (!canvasRef.current || modoCreacion === "sin-mapeo") return;
 
     const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const x = Number((((e.clientX - rect.left) * scaleX)).toFixed(2));
-    const y = Number((((e.clientY - rect.top) * scaleY)).toFixed(2));
+    const { x, y } = getCanvasPointFromEvent(e, canvas);
 
     // Validar que esté dentro del área delimitada
     const dentroDeArea = delimitaciones.some(
@@ -248,57 +238,16 @@ export default function PuestoModal({
   };
 
   const dibujarGrilla = () => {
-    if (!canvasRef.current || !mostrarGrilla) return;
-
+    if (!canvasRef.current) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
-    const gridSize = 20;
-
-    ctx.strokeStyle = "#E5E7EB";
-    ctx.lineWidth = 0.5;
-
-    for (let x = 0; x < canvas.width; x += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, canvas.height);
-      ctx.stroke();
-    }
-
-    for (let y = 0; y < canvas.height; y += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(canvas.width, y);
-      ctx.stroke();
-    }
+    drawGridCanvas(ctx, canvas, mostrarGrilla);
   };
 
   const dibujarDelimitaciones = () => {
     if (!canvasRef.current || delimitaciones.length === 0) return;
-
     const ctx = canvasRef.current.getContext("2d");
-
-    delimitaciones.forEach((d) => {
-      ctx.strokeStyle = "#3B82F6";
-      ctx.lineWidth = 2;
-      ctx.setLineDash([5, 5]);
-      ctx.fillStyle = "rgba(59, 130, 246, 0.1)";
-
-      ctx.fillRect(
-        Number(d.PosicionX),
-        Number(d.PosicionY),
-        Number(d.Ancho),
-        Number(d.Alto),
-      );
-
-      ctx.strokeRect(
-        Number(d.PosicionX),
-        Number(d.PosicionY),
-        Number(d.Ancho),
-        Number(d.Alto),
-      );
-
-      ctx.setLineDash([]);
-    });
+    drawDelimitacionesCanvas(ctx, delimitaciones);
   };
 
   const dibujarPunto = () => {
@@ -317,45 +266,16 @@ export default function PuestoModal({
     // 3️⃣ Dibujar puestos existentes
     puestosExistentes.forEach((p) => {
       if (p.UbicacionX != null && p.UbicacionY != null) {
-        ctx.beginPath();
-        ctx.arc(Number(p.UbicacionX), Number(p.UbicacionY), 8, 0, 2 * Math.PI);
-        ctx.fillStyle = "#9CA3AF";
-        ctx.fill();
-        ctx.strokeStyle = "#6B7280";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        ctx.fillStyle = "#FFFFFF";
-        ctx.font = "bold 10px Arial";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(p.NoPuesto, Number(p.UbicacionX), Number(p.UbicacionY));
+        drawPuesto(ctx, p);
       }
     });
 
     // 4️⃣ Dibujar punto actual (mismo centro que preview/mapa)
-    ctx.beginPath();
-    ctx.arc(puntoSeleccionado.x, puntoSeleccionado.y, 12, 0, 2 * Math.PI);
-    ctx.strokeStyle = "rgba(59, 130, 246, 0.5)";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(puntoSeleccionado.x, puntoSeleccionado.y, 8, 0, 2 * Math.PI);
-    ctx.fillStyle = "#3B82F6";
-    ctx.fill();
-    ctx.strokeStyle = "#1D4ED8";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 11px Arial";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(
-      formData.noPuesto || "?",
+    drawSelectedPuesto(
+      ctx,
       puntoSeleccionado.x,
       puntoSeleccionado.y,
+      formData.noPuesto || "?",
     );
   };
 

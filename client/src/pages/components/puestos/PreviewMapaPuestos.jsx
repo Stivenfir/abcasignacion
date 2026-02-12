@@ -1,5 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
+import {
+  syncCanvasToImage,
+  drawDelimitaciones as drawDelimitacionesCanvas,
+  drawPuesto,
+} from "../../utils/mapCanvas";
 
 export default function PreviewMapaPuestos({
   pisoSeleccionado,
@@ -14,21 +19,7 @@ export default function PreviewMapaPuestos({
   const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
   const sincronizarCanvasConImagen = useCallback(() => {
-    if (!canvasRef.current || !imagenRef.current) return;
-
-    const canvas = canvasRef.current;
-    const imagen = imagenRef.current;
-    const width = imagen.clientWidth;
-    const height = imagen.clientHeight;
-
-    if (!width || !height) return;
-
-    // Las delimitaciones se guardan en este mismo espacio renderizado,
-    // así que el canvas debe usar estas dimensiones para no descuadrarse.
-    canvas.width = width;
-    canvas.height = height;
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
+    syncCanvasToImage(canvasRef.current, imagenRef.current);
   }, []);
 
   const dibujarPuestos = useCallback(() => {
@@ -41,25 +32,7 @@ export default function PreviewMapaPuestos({
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    delimitaciones.forEach((d) => {
-      ctx.strokeStyle = "#3B82F6";
-      ctx.lineWidth = 2;
-      ctx.setLineDash([5, 5]);
-      ctx.fillStyle = "rgba(59, 130, 246, 0.15)";
-
-      ctx.fillRect(
-        Number(d.PosicionX),
-        Number(d.PosicionY),
-        Number(d.Ancho),
-        Number(d.Alto),
-      );
-      ctx.strokeRect(
-        Number(d.PosicionX),
-        Number(d.PosicionY),
-        Number(d.Ancho),
-        Number(d.Alto),
-      );
-    });
+    drawDelimitacionesCanvas(ctx, delimitaciones);
 
     ctx.setLineDash([]);
 
@@ -69,29 +42,7 @@ export default function PreviewMapaPuestos({
       let color = puesto.Disponible === "SI" ? "#10B981" : "#EF4444";
       if (puesto.AsignadoA) color = "#F59E0B";
 
-      ctx.beginPath();
-      ctx.arc(
-        Number(puesto.UbicacionX),
-        Number(puesto.UbicacionY),
-        8,
-        0,
-        2 * Math.PI,
-      );
-      ctx.fillStyle = color;
-      ctx.fill();
-      ctx.strokeStyle = "#FFFFFF";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      ctx.fillStyle = "#FFFFFF";
-      ctx.font = "bold 10px Arial";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(
-        puesto.NoPuesto,
-        Number(puesto.UbicacionX),
-        Number(puesto.UbicacionY),
-      );
+      drawPuesto(ctx, puesto, color);
     });
   }, [delimitaciones, puestos]);
 
