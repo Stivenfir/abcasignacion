@@ -13,6 +13,55 @@ async function fetchConTimeout(url, options = {}) {
   }
 }
 
+
+async function construirIndicePuestosPorPiso(API, headers, pisosFuente = []) {
+  const indice = new Map();
+  const pisos = (Array.isArray(pisosFuente) ? pisosFuente : []).filter((p) => p?.IDPiso != null);
+
+  await Promise.all(
+    pisos.map(async (piso) => {
+      try {
+        const resAreas = await fetchConTimeout(`${API}/api/areas/piso/${piso.IDPiso}`, { headers });
+        if (!resAreas.ok) return;
+
+        const areas = await resAreas.json();
+        const listaAreas = Array.isArray(areas) ? areas : [];
+
+        const respuestasPuestos = await Promise.all(
+          listaAreas
+            .filter((a) => a?.IdAreaPiso)
+            .map((area) =>
+              fetchConTimeout(`${API}/api/puestos/area/${area.IdAreaPiso}`, { headers })
+                .then((r) => (r.ok ? r.json() : []))
+                .catch(() => []),
+            ),
+        );
+
+        respuestasPuestos.flat().forEach((puesto) => {
+          const idPuesto = Number(puesto?.IdPuestoTrabajo);
+          if (!Number.isFinite(idPuesto) || idPuesto <= 0) return;
+
+          indice.set(idPuesto, {
+            IdPiso: Number(piso.IDPiso),
+            NumeroPiso: piso.NumeroPiso ?? piso.IDPiso,
+            Bodega: piso.Bodega ?? null,
+            IdArea: puesto?.IdArea ?? null,
+            NombreArea: puesto?.NombreArea ?? null,
+            UbicacionX: puesto?.UbicacionX ?? null,
+            UbicacionY: puesto?.UbicacionY ?? null,
+            NoPuesto: puesto?.NoPuesto ?? null,
+            IdAreaPiso: puesto?.IdAreaPiso ?? null,
+          });
+        });
+      } catch {
+        // noop
+      }
+    }),
+  );
+
+  return indice;
+}
+
 export function useReservas() {
   const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
@@ -49,6 +98,14 @@ export function useReservas() {
         fetchConTimeout(`${API}/api/pisos`),
       ]);
 
+      let catalogoPisos =
+        resCatalogoPisos.status === "fulfilled" && resCatalogoPisos.value.ok
+          ? await resCatalogoPisos.value.json()
+          : [];
+      catalogoPisos = Array.isArray(catalogoPisos) ? catalogoPisos : [];
+
+      let pisosNormalizados = [];
+
       if (resPisos.status === "fulfilled" && resPisos.value.ok) {
         const dataPisos = await resPisos.value.json();
         const pisosHabilitadosBase = Array.isArray(dataPisos)
@@ -57,13 +114,8 @@ export function useReservas() {
             ? dataPisos.pisos
             : [];
 
-        const catalogoPisos =
-          resCatalogoPisos.status === "fulfilled" && resCatalogoPisos.value.ok
-            ? await resCatalogoPisos.value.json()
-            : [];
-
         const mapaCatalogo = new Map(
-          (Array.isArray(catalogoPisos) ? catalogoPisos : []).map((piso) => [
+          catalogoPisos.map((piso) => [
             Number(piso.IDPiso),
             piso,
           ]),
@@ -82,6 +134,7 @@ export function useReservas() {
           ? dataPisos.scope
           : "area";
 
+        pisosNormalizados = pisosHabilitados;
         setPisos(pisosHabilitados);
         setScopePisos(scope);
 
@@ -99,7 +152,37 @@ export function useReservas() {
 
       if (resReservas.status === "fulfilled" && resReservas.value.ok) {
         const dataReservas = await resReservas.value.json();
-        setReservas(Array.isArray(dataReservas) ? dataReservas : []);
+        let reservasBase = Array.isArray(dataReservas) ? dataReservas : [];
+
+        if (reservasBase.length) {
+          const pisosFuente = pisosNormalizados.length
+            ? pisosNormalizados
+            : catalogoPisos.map((p) => ({
+                IDPiso: p.IDPiso,
+                NumeroPiso: p.NumeroPiso,
+                Bodega: p.Bodega,
+              }));
+
+          const indicePuestos = await construirIndicePuestosPorPiso(API, headers, pisosFuente);
+
+          reservasBase = reservasBase.map((reserva) => {
+            const detalle = indicePuestos.get(Number(reserva?.IdPuestoTrabajo));
+            if (!detalle) return reserva;
+
+            return {
+              ...detalle,
+              ...reserva,
+              IdPiso: reserva?.IdPiso ?? detalle.IdPiso,
+              NumeroPiso: reserva?.NumeroPiso ?? detalle.NumeroPiso,
+              UbicacionX: reserva?.UbicacionX ?? detalle.UbicacionX,
+              UbicacionY: reserva?.UbicacionY ?? detalle.UbicacionY,
+              NombreArea: reserva?.NombreArea ?? detalle.NombreArea,
+              IdArea: reserva?.IdArea ?? detalle.IdArea,
+            };
+          });
+        }
+
+        setReservas(reservasBase);
       } else {
         setReservas([]);
       }
