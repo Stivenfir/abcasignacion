@@ -58,6 +58,15 @@ function toDisplayPoint(valueX, valueY, metrics) {
   const y = Number(valueY);
   if (!Number.isFinite(x) || !Number.isFinite(y) || !metrics) return null;
 
+  const coordenadasNormalizadas = x >= 0 && y >= 0 && x <= 1 && y <= 1;
+  if (coordenadasNormalizadas) {
+    return {
+      x: x * metrics.displayWidth,
+      y: y * metrics.displayHeight,
+      source: "normalized",
+    };
+  }
+
   const yaEnDisplay = x >= 0 && y >= 0 && x <= metrics.displayWidth && y <= metrics.displayHeight;
   if (yaEnDisplay) {
     return { x, y, source: "display" };
@@ -164,12 +173,7 @@ export default function MapaReservaModal({
 
   useEffect(() => {
     const resolverUbicacionReserva = async () => {
-      if (!reserva) return;
-
-      const coords = getReservaCoords(reserva);
-      if (coords.hasCoords || !pisoEfectivo?.IDPiso) {
-        return;
-      }
+      if (!reserva || !pisoEfectivo?.IDPiso) return;
 
       const idPuesto = getReservaIdPuesto(reserva);
       if (!idPuesto) return;
@@ -205,7 +209,9 @@ export default function MapaReservaModal({
         setReservaRender((prev) => ({
           ...(prev || {}),
           ...puesto,
+          // Mantener etiqueta previa solo si existe; de lo contrario usar la del catálogo.
           NoPuesto: getReservaPuestoLabel(prev) ?? getReservaPuestoLabel(puesto),
+          IdPuestoTrabajo: Number(puesto.IdPuestoTrabajo ?? prev?.IdPuestoTrabajo ?? idPuesto),
         }));
       } finally {
         setLoadingUbicacion(false);
@@ -415,8 +421,24 @@ export default function MapaReservaModal({
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const delimitacionesValidas = (Array.isArray(delimitacionesArea) ? delimitacionesArea : [])
-      .map((d) => toDisplayRect(d, metrics))
-      .filter((d) => d && [d.x, d.y, d.w, d.h].every(Number.isFinite));
+      .map((d) => {
+        const rectDisplay = toDisplayRect(d, metrics);
+        const rawX = Number(d?.PosicionX);
+        const rawY = Number(d?.PosicionY);
+        const rawW = Number(d?.Ancho);
+        const rawH = Number(d?.Alto);
+
+        if (!rectDisplay || ![rawX, rawY, rawW, rawH].every(Number.isFinite)) return null;
+
+        return {
+          ...rectDisplay,
+          rawX,
+          rawY,
+          rawW,
+          rawH,
+        };
+      })
+      .filter((d) => d && [d.x, d.y, d.w, d.h, d.rawX, d.rawY, d.rawW, d.rawH].every(Number.isFinite));
 
     const puntoBasePreview = coords.hasCoords ? toDisplayPoint(coords.x, coords.y, metrics) : null;
     const delimitacionesParaDibujar = (() => {
@@ -460,20 +482,37 @@ export default function MapaReservaModal({
       candidatos.push({ x: puntoBase.x, y: puntoBase.y, tipo: puntoBase.source });
     }
 
-    // 2) Coordenadas normalizadas 0..1
-    if (coords.x >= 0 && coords.x <= 1 && coords.y >= 0 && coords.y <= 1) {
-      candidatos.push({
-        x: coords.x * metrics.displayWidth,
-        y: coords.y * metrics.displayHeight,
-        tipo: "normalizado",
-      });
-    }
-
-    // 3) Coordenadas guardadas en escala natural de la imagen
+    // 2) Coordenadas guardadas en escala natural de la imagen
     candidatos.push({
       x: (coords.x * metrics.displayWidth) / metrics.naturalWidth,
       y: (coords.y * metrics.displayHeight) / metrics.naturalHeight,
       tipo: "natural-a-display",
+    });
+
+    // 3) Coordenadas relativas a la delimitación que contiene el punto original.
+    // Esto corrige desfases cuando el mapeo fue guardado con otro tamaño de visualización.
+    delimitacionesParaDibujar.forEach((d) => {
+      const dentroRaw = coords.x >= d.rawX && coords.x <= d.rawX + d.rawW && coords.y >= d.rawY && coords.y <= d.rawY + d.rawH;
+      if (dentroRaw && d.rawW > 0 && d.rawH > 0 && d.w > 0 && d.h > 0) {
+        const relX = (coords.x - d.rawX) / d.rawW;
+        const relY = (coords.y - d.rawY) / d.rawH;
+
+        candidatos.push({
+          x: d.x + relX * d.w,
+          y: d.y + relY * d.h,
+          tipo: "relativo-delimitacion",
+        });
+      }
+
+      // 4) Fallback para datos históricos: coordenadas guardadas relativas al área (origen 0,0 en delimitación)
+      const pareceLocal = coords.x >= 0 && coords.y >= 0 && coords.x <= d.rawW && coords.y <= d.rawH;
+      if (pareceLocal && d.rawW > 0 && d.rawH > 0 && d.w > 0 && d.h > 0) {
+        candidatos.push({
+          x: d.x + (coords.x * d.w) / d.rawW,
+          y: d.y + (coords.y * d.h) / d.rawH,
+          tipo: "local-delimitacion",
+        });
+      }
     });
 
     const puntaje = (pt) => {
