@@ -140,6 +140,7 @@ export default function MapaReservaModal({
   const [loading, setLoading] = useState(true);  
   const [loadingUbicacion, setLoadingUbicacion] = useState(false);
   const [delimitacionesArea, setDelimitacionesArea] = useState([]);
+  const [zoomLevel, setZoomLevel] = useState(1);
   const canvasRef = useRef(null);  
   const imagenRef = useRef(null);  
   const API = import.meta.env.VITE_API_URL || "http://localhost:3000";  
@@ -606,7 +607,7 @@ export default function MapaReservaModal({
         animate={{ opacity: 1, scale: 1 }}  
         exit={{ opacity: 0, scale: 0.95 }}  
         onClick={(e) => e.stopPropagation()}  
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col"  
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col"  
       >  
         {/* Header */}  
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-green-50 to-emerald-50 rounded-t-2xl">  
@@ -618,12 +619,29 @@ export default function MapaReservaModal({
               {reservaRender?.NombreArea || areaAsignada?.NombreArea || `Área ${areaAsignada?.IdArea || "N/D"}`} • Puesto #{puestoLabel}
             </p>  
           </div>  
-          <button  
-            onClick={onClose}  
-            className="w-10 h-10 rounded-full hover:bg-white/80 flex items-center justify-center transition text-gray-600 hover:text-gray-900"  
-          >  
-            <span className="text-2xl">✕</span>  
-          </button>  
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setZoomLevel((prev) => Math.max(0.75, prev - 0.25))}
+              className="px-3 py-2 bg-white hover:bg-gray-100 rounded-lg text-sm font-medium transition shadow-sm"
+            >
+              🔍−
+            </button>
+            <span className="text-sm text-gray-600 font-medium min-w-14 text-center">
+              {Math.round(zoomLevel * 100)}%
+            </span>
+            <button
+              onClick={() => setZoomLevel((prev) => Math.min(2, prev + 0.25))}
+              className="px-3 py-2 bg-white hover:bg-gray-100 rounded-lg text-sm font-medium transition shadow-sm"
+            >
+              🔍+
+            </button>
+            <button  
+              onClick={onClose}  
+              className="w-10 h-10 rounded-full hover:bg-white/80 flex items-center justify-center transition text-gray-600 hover:text-gray-900"  
+            >  
+              <span className="text-2xl">✕</span>  
+            </button>
+          </div>
         </div>  
   
         {/* Contenido */}  
@@ -659,20 +677,27 @@ export default function MapaReservaModal({
                   Este registro no tiene coordenadas guardadas, pero puedes ubicarte por piso y área.
                 </div>
               ) : null}
-              <div className="relative inline-block border-2 border-gray-300 rounded-lg overflow-hidden shadow-lg">  
-                <img  
-                  ref={imagenRef}  
-                  src={planoUrl}  
-                  alt="Plano del piso"  
-                  className="max-w-full h-auto block"  
-                  onLoad={() => {
-                    dibujarPuestoAsignado();
-                  }}
-                />  
-                <canvas  
-                  ref={canvasRef}  
-                  className="absolute top-0 left-0 pointer-events-none z-10"  
-                />  
+              <div className="max-h-[65vh] overflow-x-auto overflow-y-auto rounded-xl border-2 border-gray-300 bg-gray-50 shadow-lg">
+                <div
+                  className="inline-block"
+                  style={{ transform: `scale(${zoomLevel})`, transformOrigin: "top left" }}
+                >
+                  <div className="relative inline-block">
+                    <img
+                      ref={imagenRef}
+                      src={planoUrl}
+                      alt="Plano del piso"
+                      className="block w-auto max-w-none h-auto"
+                      onLoad={() => {
+                        dibujarPuestoAsignado();
+                      }}
+                    />
+                    <canvas
+                      ref={canvasRef}
+                      className="absolute top-0 left-0 pointer-events-none z-10"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           )}  
