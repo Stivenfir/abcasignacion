@@ -23,6 +23,7 @@ export default function PuestoModal({
   const [error, setError] = useState(null);
   const [modoCreacion, setModoCreacion] = useState("con-mapeo");
   const [puntoSeleccionado, setPuntoSeleccionado] = useState(null);
+  const [cursorPos, setCursorPos] = useState(null);
   const [formData, setFormData] = useState({
     noPuesto: puestoAEditar?.NoPuesto || "",
     disponible: puestoAEditar?.Disponible || "SI",
@@ -235,6 +236,18 @@ export default function PuestoModal({
     }
 
     setPuntoSeleccionado({ x, y });
+  };
+
+
+  const handleCanvasMouseMove = (e) => {
+    if (!canvasRef.current || modoCreacion === "sin-mapeo") return;
+
+    const point = getCanvasPointFromEvent(e, canvasRef.current);
+    setCursorPos(point);
+  };
+
+  const handleCanvasMouseLeave = () => {
+    setCursorPos(null);
   };
 
   const dibujarGrilla = () => {
@@ -555,67 +568,113 @@ export default function PuestoModal({
                     )}
                   </div>
 
-                  <div className="relative inline-block border-2 border-gray-300 rounded-xl overflow-hidden">
-                    <img
-                      ref={imagenRef}
-                      src={planoUrl}
-                      alt="Plano del piso"
-                      className="max-w-full h-auto"
-                      onLoad={() => {
-                        if (!canvasRef.current) return;
-
-                        sincronizarCanvasConImagen();
-
-                        if (delimitaciones.length > 0) {
-                          const ctx = canvasRef.current.getContext("2d");
-                          ctx.clearRect(
-                            0,
-                            0,
-                            canvasRef.current.width,
-                            canvasRef.current.height,
-                          );
-                          dibujarGrilla();
-                          dibujarDelimitaciones();
-
-                          puestosExistentes.forEach((p) => {
-                            if (p.UbicacionX != null && p.UbicacionY != null) {
-                              ctx.beginPath();
-                              ctx.arc(
-                                Number(p.UbicacionX),
-                                Number(p.UbicacionY),
-                                8,
-                                0,
-                                2 * Math.PI,
-                              );
-                              ctx.fillStyle = "#9CA3AF";
-                              ctx.fill();
-                              ctx.strokeStyle = "#6B7280";
-                              ctx.lineWidth = 2;
-                              ctx.stroke();
-
-                              ctx.fillStyle = "#FFFFFF";
-                              ctx.font = "bold 10px Arial";
-                              ctx.textAlign = "center";
-                              ctx.textBaseline = "middle";
-                              ctx.fillText(
-                                p.NoPuesto,
-                                Number(p.UbicacionX),
-                                Number(p.UbicacionY),
-                              );
-                            }
-                          });
+                  <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() =>
+                          setZoomLevel((prev) => Math.max(0.75, prev - 0.1))
                         }
-
-                        if (puntoSeleccionado) {
-                          dibujarPunto();
+                        className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded text-sm"
+                      >
+                        🔍−
+                      </button>
+                      <span className="text-sm text-gray-600 min-w-[60px]">
+                        {Math.round(zoomLevel * 100)}%
+                      </span>
+                      <button
+                        onClick={() =>
+                          setZoomLevel((prev) => Math.min(2.5, prev + 0.1))
                         }
+                        className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded text-sm"
+                      >
+                        🔍+
+                      </button>
+                      <button
+                        onClick={() => {
+                          setZoomLevel(1);
+                          if (containerRef.current) {
+                            containerRef.current.scrollTop = 0;
+                            containerRef.current.scrollLeft = 0;
+                          }
+                        }}
+                        className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded text-sm"
+                      >
+                        Reset
+                      </button>
+                      <button
+                        onClick={() => setMostrarGrilla((prev) => !prev)}
+                        className={`px-3 py-1 rounded text-sm ${
+                          mostrarGrilla
+                            ? "bg-blue-600 text-white hover:bg-blue-700"
+                            : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                        }`}
+                      >
+                        {mostrarGrilla ? "✓ Grilla" : "⊞ Grilla"}
+                      </button>
+                    </div>
+
+                    <div className="text-xs text-gray-600">
+                      {cursorPos
+                        ? `Cursor: (${Math.round(cursorPos.x)}, ${Math.round(cursorPos.y)})`
+                        : "Mueve el mouse sobre el plano para ver coordenadas"}
+                    </div>
+                  </div>
+
+                  <div
+                    ref={containerRef}
+                    className="relative inline-block border-2 border-gray-300 rounded-xl overflow-auto shadow-sm"
+                    style={{ maxHeight: "60vh" }}
+                  >
+                    <div
+                      style={{
+                        transform: `scale(${zoomLevel})`,
+                        transformOrigin: "top left",
+                        transition: "transform 0.2s",
+                        width: "fit-content",
+                        height: "fit-content",
                       }}
-                    />
-                    <canvas
-                      ref={canvasRef}
-                      className="absolute top-0 left-0 cursor-crosshair"
-                      onClick={handleCanvasClick}
-                    />
+                    >
+                      <img
+                        ref={imagenRef}
+                        src={planoUrl}
+                        alt="Plano del piso"
+                        className="max-w-full h-auto block"
+                        onLoad={() => {
+                          if (!canvasRef.current) return;
+
+                          sincronizarCanvasConImagen();
+
+                          if (delimitaciones.length > 0) {
+                            const ctx = canvasRef.current.getContext("2d");
+                            ctx.clearRect(
+                              0,
+                              0,
+                              canvasRef.current.width,
+                              canvasRef.current.height,
+                            );
+                            dibujarGrilla();
+                            dibujarDelimitaciones();
+
+                            puestosExistentes.forEach((p) => {
+                              if (p.UbicacionX != null && p.UbicacionY != null) {
+                                drawPuesto(ctx, p);
+                              }
+                            });
+                          }
+
+                          if (puntoSeleccionado) {
+                            dibujarPunto();
+                          }
+                        }}
+                      />
+                      <canvas
+                        ref={canvasRef}
+                        className="absolute top-0 left-0 cursor-crosshair"
+                        onClick={handleCanvasClick}
+                        onMouseMove={handleCanvasMouseMove}
+                        onMouseLeave={handleCanvasMouseLeave}
+                      />
+                    </div>
                   </div>
                 </div>
               )}
