@@ -182,10 +182,10 @@ export default function MisReservas() {
         </div>
       )}
 
-      {reservasData.scopePisos === "global" && reservasData.pisos.length > 0 && (
+      {["global", "all-pisos"].includes(reservasData.scopePisos) && reservasData.pisos.length > 0 && (
         <div className="mx-6 mt-4 p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-800">
           <p className="font-medium">
-            ℹ️ No encontramos configuración por área en este momento, así que te mostramos pisos generales disponibles.
+            ℹ️ No encontramos configuración completa por área, así que te mostramos pisos disponibles para que puedas reservar.
           </p>
         </div>
       )}

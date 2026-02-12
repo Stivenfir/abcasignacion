@@ -148,6 +148,25 @@ router.get("/pisos-habilitados", authenticateToken, async (req, res) => {
       }
     }
 
+    if (!pisos.length) {
+      const queryAllPisos = `
+        SELECT
+          P.IDPiso,
+          P.NumeroPiso,
+          P.Bodega,
+          NULL as TotalPuestosArea
+        FROM ABCDeskBooking.dbo.Piso P
+        ORDER BY P.Bodega, P.NumeroPiso
+      `;
+
+      const rtaAllPisos = await GetData(`ConsultaSQL=${encodeURIComponent(queryAllPisos)}`);
+      if (rtaAllPisos && !rtaAllPisos.trim().startsWith('Array') && !rtaAllPisos.trim().startsWith(':')) {
+        const dataAllPisos = JSON.parse(rtaAllPisos.trim())["data"];
+        pisos = Array.isArray(dataAllPisos) ? dataAllPisos : [];
+        scope = "all-pisos";
+      }
+    }
+
     logAuditoria('CONSULTAR_PISOS_HABILITADOS', usuario, {
       idArea,
       scope,

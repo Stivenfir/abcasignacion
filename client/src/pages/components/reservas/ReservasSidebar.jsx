@@ -36,7 +36,7 @@ export default function ReservasSidebar({
         <p className="text-xs text-gray-500 mb-4">
           {scopePisos === "area"
             ? "Solo se muestran pisos de tu área para reservar automáticamente."
-            : "Mostrando pisos generales mientras se parametriza la asignación por área."}
+            : "Mostrando pisos disponibles mientras se completa la parametrización por área."}
         </p>
 
         {Object.entries(pisosPorBodega).map(([bodega, pisosBodega], index) => (

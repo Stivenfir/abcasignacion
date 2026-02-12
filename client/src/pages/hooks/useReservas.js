@@ -1,5 +1,18 @@
 import { useState, useEffect } from "react";
 
+const REQUEST_TIMEOUT_MS = 10000;
+
+async function fetchConTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export function useReservas() {
   const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
@@ -22,51 +35,63 @@ export function useReservas() {
       if (!token) {
         setPisos([]);
         setReservas([]);
+        setLoading(false);
         return;
       }
 
-      // Cargar solo pisos habilitados para el área del usuario
-      const resPisos = await fetch(`${API}/api/reservas/pisos-habilitados`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      setLoadingReservas(true);
 
-      if (!resPisos.ok) throw new Error("Error al cargar pisos habilitados");
-      const dataPisos = await resPisos.json();
-      const pisosHabilitados = Array.isArray(dataPisos)
-        ? dataPisos
-        : Array.isArray(dataPisos?.pisos)
-          ? dataPisos.pisos
-          : [];
-      const scope = dataPisos?.scope === "global" ? "global" : "area";
+      const headers = { Authorization: `Bearer ${token}` };
 
-      setPisos(pisosHabilitados);
-      setScopePisos(scope);
+      const [resPisos, resReservas] = await Promise.allSettled([
+        fetchConTimeout(`${API}/api/reservas/pisos-habilitados`, { headers }),
+        fetchConTimeout(`${API}/api/reservas/empleado`, { headers }),
+      ]);
 
-      // Si el piso seleccionado ya no está habilitado, seleccionar el primero
-      setPisoSeleccionado((prev) => {
-        if (!pisosHabilitados.length) return null;
-        if (prev && pisosHabilitados.some((p) => p.IDPiso === prev.IDPiso)) {
-          return prev;
-        }
-        return pisosHabilitados[0];
-      });
+      if (resPisos.status === "fulfilled" && resPisos.value.ok) {
+        const dataPisos = await resPisos.value.json();
+        const pisosHabilitados = Array.isArray(dataPisos)
+          ? dataPisos
+          : Array.isArray(dataPisos?.pisos)
+            ? dataPisos.pisos
+            : [];
 
-      // Cargar reservas del usuario
-      const resReservas = await fetch(`${API}/api/reservas/empleado`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+        const scope = ["global", "all-pisos"].includes(dataPisos?.scope)
+          ? dataPisos.scope
+          : "area";
 
-      if (!resReservas.ok) {
-        setReservas([]);
+        setPisos(pisosHabilitados);
+        setScopePisos(scope);
+
+        setPisoSeleccionado((prev) => {
+          if (!pisosHabilitados.length) return null;
+          if (prev && pisosHabilitados.some((p) => p.IDPiso === prev.IDPiso)) {
+            return prev;
+          }
+          return pisosHabilitados[0];
+        });
       } else {
-        const dataReservas = await resReservas.json();
+        setPisos([]);
+        setScopePisos("area");
+      }
+
+      if (resReservas.status === "fulfilled" && resReservas.value.ok) {
+        const dataReservas = await resReservas.value.json();
         setReservas(Array.isArray(dataReservas) ? dataReservas : []);
+      } else {
+        setReservas([]);
       }
     } catch (error) {
-      console.error("Error en cargarDatos:", error);
-      setMensaje({ tipo: "error", texto: "✗ Error al cargar datos de reservas" });
+      const mensajeError =
+        error.name === "AbortError"
+          ? "✗ La consulta de reservas tardó demasiado. Intenta recargar."
+          : "✗ Error al cargar datos de reservas";
+      setMensaje({ tipo: "error", texto: mensajeError });
+      setPisos([]);
+      setReservas([]);
     } finally {
       setLoading(false);
+      setLoadingReservas(false);
     }
   };
 
@@ -96,7 +121,6 @@ export function useReservas() {
       await cargarDatos();
       return true;
     } catch (error) {
-      console.error("Error en cancelarReserva:", error);
       setMensaje({ tipo: "error", texto: `✗ ${error.message}` });
       return false;
     }
