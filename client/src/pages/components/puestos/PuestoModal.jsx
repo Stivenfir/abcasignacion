@@ -10,6 +10,13 @@ import {
   drawSelectedPuesto,
 } from "../../utils/mapCanvas";
 
+
+const normalizarDisponible = (valor) => {
+  const texto = String(valor ?? "").trim().toUpperCase();
+  if (["SI", "SÍ", "1", "TRUE", "DISPONIBLE"].includes(texto)) return "SI";
+  return "NO";
+};
+
 export default function PuestoModal({
   pisoSeleccionado,
   areaSeleccionada,
@@ -26,7 +33,7 @@ export default function PuestoModal({
   const [cursorPos, setCursorPos] = useState(null);
   const [formData, setFormData] = useState({
     noPuesto: puestoAEditar?.NoPuesto || "",
-    disponible: puestoAEditar?.Disponible || "SI",
+    disponible: normalizarDisponible(puestoAEditar?.Disponible || "SI"),
     idClasificacion: puestoAEditar?.IDClasificacionPuesto || "",
   });
 
