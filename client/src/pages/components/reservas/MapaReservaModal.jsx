@@ -1,5 +1,78 @@
 import { useState, useRef, useEffect } from "react";  
 import { motion } from "framer-motion";  
+
+function pickFirst(raw, keys) {
+  for (const key of keys) {
+    if (raw?.[key] !== undefined && raw?.[key] !== null && raw?.[key] !== "") {
+      return raw[key];
+    }
+  }
+  return null;
+}
+
+function getReservaCoords(raw) {
+  const xRaw = pickFirst(raw, [
+    "UbicacionX",
+    "ubicacionX",
+    "PosicionX",
+    "posicionX",
+    "X",
+    "x",
+  ]);
+  const yRaw = pickFirst(raw, [
+    "UbicacionY",
+    "ubicacionY",
+    "PosicionY",
+    "posicionY",
+    "Y",
+    "y",
+  ]);
+
+  const x = Number(xRaw);
+  const y = Number(yRaw);
+  const hasCoords = Number.isFinite(x) && Number.isFinite(y);
+
+  return {
+    hasCoords,
+    x: hasCoords ? x : null,
+    y: hasCoords ? y : null,
+  };
+}
+
+function getReservaPuestoLabel(raw) {
+  return pickFirst(raw, [
+    "NoPuesto",
+    "NumeroPuesto",
+    "Puesto",
+    "IdPuestoTrabajo",
+    "IDPuestoTrabajo",
+  ]);
+}
+
+function getReservaIdPuesto(raw) {
+  const idRaw = pickFirst(raw, ["IdPuestoTrabajo", "IDPuestoTrabajo", "idPuestoTrabajo"]);
+  const id = Number(idRaw);
+  return Number.isFinite(id) ? id : null;
+}
+
+function syncCanvasWithImage(canvas, image) {
+  if (!canvas || !image) return null;
+
+  const displayWidth = image.clientWidth || image.width || 0;
+  const displayHeight = image.clientHeight || image.height || 0;
+  const naturalWidth = image.naturalWidth || displayWidth;
+  const naturalHeight = image.naturalHeight || displayHeight;
+
+  if (!displayWidth || !displayHeight || !naturalWidth || !naturalHeight) return null;
+
+  // Canvas en el mismo sistema visual que usa el usuario (display)
+  canvas.width = displayWidth;
+  canvas.height = displayHeight;
+  canvas.style.width = `${displayWidth}px`;
+  canvas.style.height = `${displayHeight}px`;
+
+  return { naturalWidth, naturalHeight, displayWidth, displayHeight };
+}
   
 export default function MapaReservaModal({  
   reserva,  
@@ -7,17 +80,76 @@ export default function MapaReservaModal({
   areaAsignada,  
   onClose  
 }) {  
+  const [reservaRender, setReservaRender] = useState(reserva || null);
   const [planoUrl, setPlanoUrl] = useState(null);  
   const [loading, setLoading] = useState(true);  
+  const [loadingUbicacion, setLoadingUbicacion] = useState(false);
   const canvasRef = useRef(null);  
   const imagenRef = useRef(null);  
   const API = import.meta.env.VITE_API_URL || "http://localhost:3000";  
+
+  useEffect(() => {
+    setReservaRender(reserva || null);
+  }, [reserva]);
   
   useEffect(() => {  
     if (pisoSeleccionado?.IDPiso) {  
       cargarPlano();  
     }  
   }, [pisoSeleccionado]);  
+
+  useEffect(() => {
+    const resolverUbicacionReserva = async () => {
+      if (!reserva) return;
+
+      const coords = getReservaCoords(reserva);
+      if (coords.hasCoords || !pisoSeleccionado?.IDPiso || reserva?.__pisoEstimado) {
+        return;
+      }
+
+      const idPuesto = getReservaIdPuesto(reserva);
+      if (!idPuesto) return;
+
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      setLoadingUbicacion(true);
+      try {
+        const resAreas = await fetch(`${API}/api/areas/piso/${pisoSeleccionado.IDPiso}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!resAreas.ok) return;
+
+        const areas = await resAreas.json();
+        const areasValidas = (Array.isArray(areas) ? areas : []).filter((a) => a?.IdAreaPiso);
+        if (!areasValidas.length) return;
+
+        const respuestasPuestos = await Promise.all(
+          areasValidas.map((area) =>
+            fetch(`${API}/api/puestos/area/${area.IdAreaPiso}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+              .then((r) => (r.ok ? r.json() : []))
+              .catch(() => []),
+          ),
+        );
+
+        const puestos = respuestasPuestos.flat().filter(Boolean);
+        const puesto = puestos.find((p) => Number(p?.IdPuestoTrabajo) === idPuesto);
+        if (!puesto) return;
+
+        setReservaRender((prev) => ({
+          ...(prev || {}),
+          ...puesto,
+          NoPuesto: getReservaPuestoLabel(prev) ?? getReservaPuestoLabel(puesto),
+        }));
+      } finally {
+        setLoadingUbicacion(false);
+      }
+    };
+
+    resolverUbicacionReserva();
+  }, [API, pisoSeleccionado, reserva]);
   
   const cargarPlano = async () => {  
     try {  
@@ -34,47 +166,82 @@ export default function MapaReservaModal({
     }  
   };  
   
-  const dibujarPuestoAsignado = () => {  
-    if (!canvasRef.current || !reserva?.UbicacionX || !reserva?.UbicacionY) return;  
+  const dibujarPuestoAsignado = () => {
+    const coords = getReservaCoords(reservaRender);
+    const canvas = canvasRef.current;
+    const imagen = imagenRef.current;
+
+    if (!canvas || !imagen) return;
+
+    const metrics = syncCanvasWithImage(canvas, imagen);
+    if (!metrics) return;
+
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (!coords.hasCoords) return;
+
+    let x = coords.x;
+    let y = coords.y;
+
+    // Soportar ambos sistemas: coordenada en display (mapeo) o en natural (imagen original)
+    const pareceNatural = x > metrics.displayWidth || y > metrics.displayHeight;
+    if (pareceNatural && metrics.naturalWidth && metrics.naturalHeight) {
+      x = (x * metrics.displayWidth) / metrics.naturalWidth;
+      y = (y * metrics.displayHeight) / metrics.naturalHeight;
+    }
+
+    const outOfBounds = x < 0 || y < 0 || x > metrics.displayWidth || y > metrics.displayHeight;
+    if (outOfBounds) return;
+
+    // Dibujar círculo verde brillante para el puesto asignado
+    ctx.shadowColor = "rgba(16, 185, 129, 0.5)";
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+
+    ctx.beginPath();
+    ctx.arc(x, y, 15, 0, 2 * Math.PI);
+    ctx.fillStyle = "#10B981";
+    ctx.fill();
+
+    ctx.shadowColor = "transparent";
+    ctx.strokeStyle = "#059669";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Dibujar número del puesto
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 14px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(getReservaPuestoLabel(reservaRender) ?? "#", x, y);
+
+    // Dibujar pulso animado
+    ctx.beginPath();
+    ctx.arc(x, y, 25, 0, 2 * Math.PI);
+    ctx.strokeStyle = "rgba(16, 185, 129, 0.3)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  };
+
+  useEffect(() => {
+    if (planoUrl) {
+      dibujarPuestoAsignado();
+    }
+  }, [planoUrl, reservaRender]);
+
+  useEffect(() => {
+    if (!planoUrl) return;
+
+    const onResize = () => dibujarPuestoAsignado();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [planoUrl, reservaRender]);
   
-    const canvas = canvasRef.current;  
-    const ctx = canvas.getContext("2d");  
-    ctx.clearRect(0, 0, canvas.width, canvas.height);  
-  
-    const x = Number(reserva.UbicacionX);  
-    const y = Number(reserva.UbicacionY);  
-  
-    // Dibujar círculo verde brillante para el puesto asignado  
-    ctx.shadowColor = 'rgba(16, 185, 129, 0.5)';  
-    ctx.shadowBlur = 10;  
-    ctx.shadowOffsetX = 0;  
-    ctx.shadowOffsetY = 0;  
-  
-    ctx.beginPath();  
-    ctx.arc(x, y, 15, 0, 2 * Math.PI);  
-    ctx.fillStyle = "#10B981";  
-    ctx.fill();  
-  
-    ctx.shadowColor = 'transparent';  
-    ctx.strokeStyle = "#059669";  
-    ctx.lineWidth = 3;  
-    ctx.stroke();  
-  
-    // Dibujar número del puesto  
-    ctx.fillStyle = "#FFFFFF";  
-    ctx.font = "bold 14px Arial";  
-    ctx.textAlign = "center";  
-    ctx.textBaseline = "middle";  
-    ctx.fillText(reserva.NoPuesto, x, y);  
-  
-    // Dibujar pulso animado  
-    ctx.beginPath();  
-    ctx.arc(x, y, 25, 0, 2 * Math.PI);  
-    ctx.strokeStyle = "rgba(16, 185, 129, 0.3)";  
-    ctx.lineWidth = 2;  
-    ctx.stroke();  
-  };  
-  
+  const coordsReserva = getReservaCoords(reservaRender);
+  const puestoLabel = getReservaPuestoLabel(reservaRender) ?? "N/D";
+
   return (  
     <div  
       className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"  
@@ -94,7 +261,7 @@ export default function MapaReservaModal({
               ✅ Puesto Asignado  
             </h3>  
             <p className="text-sm text-gray-600 mt-1">  
-              {areaAsignada?.NombreArea || `Área ${areaAsignada?.IdArea}`} • Puesto #{reserva?.NoPuesto}  
+              {areaAsignada?.NombreArea || `Área ${areaAsignada?.IdArea || "N/D"}`} • Puesto #{puestoLabel}
             </p>  
           </div>  
           <button  
@@ -112,31 +279,49 @@ export default function MapaReservaModal({
               🎉 Tu reserva ha sido confirmada. Este es tu puesto asignado en el plano.  
             </p>  
           </div>  
+
+          {loadingUbicacion && (
+            <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-sm">
+              Buscando coordenadas reales del puesto reservado...
+            </div>
+          )}
+          {reservaRender?.__pisoEstimado && (
+            <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+              Mostrando un piso estimado. Si el punto no coincide, esta reserva no trae piso exacto en el registro.
+            </div>
+          )}
   
           {loading ? (  
             <div className="flex justify-center py-16">  
               <div className="w-16 h-16 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>  
             </div>  
+          ) : !planoUrl ? (
+            <div className="p-4 rounded-xl bg-yellow-50 border border-yellow-200 text-yellow-800">
+              No se encontró plano para este piso.
+            </div>
           ) : (  
-            <div className="relative inline-block border-2 border-gray-300 rounded-lg overflow-hidden shadow-lg">  
-              <img  
-                ref={imagenRef}  
-                src={planoUrl}  
-                alt="Plano del piso"  
-                className="max-w-full h-auto block"  
-                onLoad={(e) => {  
-                  if (canvasRef.current) {  
-                    canvasRef.current.width = e.target.width;  
-                    canvasRef.current.height = e.target.height;  
-                    dibujarPuestoAsignado();  
-                  }  
-                }}  
-              />  
-              <canvas  
-                ref={canvasRef}  
-                className="absolute top-0 left-0 pointer-events-none"  
-              />  
-            </div>  
+            <div>
+              {!coordsReserva.hasCoords ? (
+                <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-sm">
+                  Este registro no trae coordenadas exactas para este piso en la reserva.
+                </div>
+              ) : null}
+              <div className="relative inline-block border-2 border-gray-300 rounded-lg overflow-hidden shadow-lg">  
+                <img  
+                  ref={imagenRef}  
+                  src={planoUrl}  
+                  alt="Plano del piso"  
+                  className="max-w-full h-auto block"  
+                  onLoad={() => {
+                    dibujarPuestoAsignado();
+                  }}
+                />  
+                <canvas  
+                  ref={canvasRef}  
+                  className="absolute top-0 left-0 pointer-events-none"  
+                />  
+              </div>
+            </div>
           )}  
         </div>  
   
