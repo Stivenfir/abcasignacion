@@ -31,8 +31,22 @@ export const convertirDDMMAAAAaYYYYMMDD = (fechaDDMMAAAA) => {
  * @returns {string} Fecha en formato DD/MM/AAAA  
  */  
 export const convertirYYYYMMDDaDDMMAAAA = (fechaYYYYMMDD) => {  
-  const [anio, mes, dia] = fechaYYYYMMDD.split('-');  
-  return `${dia}/${mes}/${anio}`;  
+  if (!fechaYYYYMMDD) return "";
+
+  const texto = String(fechaYYYYMMDD).trim();
+  const soloFecha = texto.split(" ")[0];
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(soloFecha)) {
+    const [anio, mes, dia] = soloFecha.split('-');
+    return `${dia}/${mes}/${anio}`;
+  }
+
+  const parsed = new Date(texto);
+  if (!Number.isNaN(parsed.getTime())) {
+    return formatearFechaDDMMAAAA(parsed);
+  }
+
+  return texto;
 };  
   
 /**  
