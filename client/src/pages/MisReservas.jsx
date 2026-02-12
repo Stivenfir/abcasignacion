@@ -148,13 +148,6 @@ export default function MisReservas() {
       return false;
     }) || null;
 
-    if (!pisoReserva) {
-      reservasData.setMensaje({
-        tipo: "error",
-        texto: "✗ Esta reserva no trae piso identificado. No se puede ubicar de forma confiable en el mapa.",
-      });
-    }
-
     setReservaMapaSeleccionada({
       ...reserva,
       __pisoSeleccionado: pisoReserva,

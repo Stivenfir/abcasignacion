@@ -76,6 +76,7 @@ export default function MapaReservaModal({
   onClose  
 }) {  
   const [reservaRender, setReservaRender] = useState(reserva || null);
+  const [pisoEfectivo, setPisoEfectivo] = useState(pisoSeleccionado || null);
   const [planoUrl, setPlanoUrl] = useState(null);  
   const [loading, setLoading] = useState(true);  
   const [loadingUbicacion, setLoadingUbicacion] = useState(false);
@@ -87,9 +88,13 @@ export default function MapaReservaModal({
   useEffect(() => {
     setReservaRender(reserva || null);
   }, [reserva]);
+
+  useEffect(() => {
+    setPisoEfectivo(pisoSeleccionado || null);
+  }, [pisoSeleccionado]);
   
   useEffect(() => {  
-    if (pisoSeleccionado?.IDPiso) {  
+    if (pisoEfectivo?.IDPiso) {  
       setLoading(true);
       cargarPlano();  
       return;
@@ -97,7 +102,7 @@ export default function MapaReservaModal({
 
     setPlanoUrl(null);
     setLoading(false);
-  }, [pisoSeleccionado]);  
+  }, [pisoEfectivo]);  
 
 
   const areaIdObjetivo = Number(
@@ -109,7 +114,7 @@ export default function MapaReservaModal({
       if (!reserva) return;
 
       const coords = getReservaCoords(reserva);
-      if (coords.hasCoords || !pisoSeleccionado?.IDPiso) {
+      if (coords.hasCoords || !pisoEfectivo?.IDPiso) {
         return;
       }
 
@@ -121,7 +126,7 @@ export default function MapaReservaModal({
 
       setLoadingUbicacion(true);
       try {
-        const resAreas = await fetch(`${API}/api/areas/piso/${pisoSeleccionado.IDPiso}`, {
+        const resAreas = await fetch(`${API}/api/areas/piso/${pisoEfectivo.IDPiso}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!resAreas.ok) return;
@@ -155,11 +160,11 @@ export default function MapaReservaModal({
     };
 
     resolverUbicacionReserva();
-  }, [API, pisoSeleccionado, reserva]);
+  }, [API, pisoEfectivo, reserva]);
   
   useEffect(() => {
     const cargarDelimitacionesArea = async () => {
-      if (!pisoSeleccionado?.IDPiso) {
+      if (!pisoEfectivo?.IDPiso) {
         setDelimitacionesArea([]);
         return;
       }
@@ -171,7 +176,7 @@ export default function MapaReservaModal({
       }
 
       try {
-        const resAreas = await fetch(`${API}/api/areas/piso/${pisoSeleccionado.IDPiso}`, {
+        const resAreas = await fetch(`${API}/api/areas/piso/${pisoEfectivo.IDPiso}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
@@ -220,11 +225,58 @@ export default function MapaReservaModal({
     };
 
     cargarDelimitacionesArea();
-  }, [API, pisoSeleccionado, areaIdObjetivo, reservaRender?.IdAreaPiso, areaAsignada?.NombreArea]);
+  }, [API, pisoEfectivo, areaIdObjetivo, reservaRender?.IdAreaPiso, areaAsignada?.NombreArea]);
+
+  useEffect(() => {
+    const inferirPisoDesdeDisponibles = async () => {
+      if (pisoEfectivo?.IDPiso || !reservaRender) return;
+
+      const idPuesto = getReservaIdPuesto(reservaRender);
+      const fechaBase = String(reservaRender?.FechaReserva || "").trim().split(" ")[0];
+      if (!idPuesto || !fechaBase) return;
+
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      try {
+        const resDisp = await fetch(`${API}/api/reservas/disponibles/${fechaBase}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!resDisp.ok) return;
+
+        const disponibles = await resDisp.json();
+        const puesto = (Array.isArray(disponibles) ? disponibles : []).find(
+          (p) => Number(p?.IdPuestoTrabajo) === Number(idPuesto),
+        );
+        if (!puesto?.IdPiso) return;
+
+        let pisoCatalogo = null;
+        const resPisos = await fetch(`${API}/api/pisos`);
+        if (resPisos.ok) {
+          const pisos = await resPisos.json();
+          pisoCatalogo = (Array.isArray(pisos) ? pisos : []).find(
+            (p) => Number(p?.IDPiso) === Number(puesto.IdPiso),
+          );
+        }
+
+        setPisoEfectivo({
+          IDPiso: Number(puesto.IdPiso),
+          NumeroPiso: pisoCatalogo?.NumeroPiso ?? puesto.IdPiso,
+          Bodega: pisoCatalogo?.Bodega ?? null,
+        });
+
+        setReservaRender((prev) => ({ ...(prev || {}), ...puesto }));
+      } catch {
+        // noop
+      }
+    };
+
+    inferirPisoDesdeDisponibles();
+  }, [API, pisoEfectivo, reservaRender]);
 
   const cargarPlano = async () => {  
     try {  
-      const res = await fetch(`${API}/api/pisos/plano/${pisoSeleccionado.IDPiso}`);  
+      const res = await fetch(`${API}/api/pisos/plano/${pisoEfectivo.IDPiso}`);  
       const data = await res.json();  
         
       if (data.success && data.ruta) {  
@@ -393,7 +445,7 @@ export default function MapaReservaModal({
             <div className="flex justify-center py-16">  
               <div className="w-16 h-16 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>  
             </div>  
-          ) : !pisoSeleccionado?.IDPiso ? (
+          ) : !pisoEfectivo?.IDPiso ? (
             <div className="p-4 rounded-xl bg-yellow-50 border border-yellow-200 text-yellow-800">
               Esta reserva no trae piso asociado. No podemos ubicarla en un plano sin adivinar piso.
             </div>
