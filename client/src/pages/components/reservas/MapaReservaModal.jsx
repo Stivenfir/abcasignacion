@@ -173,12 +173,7 @@ export default function MapaReservaModal({
 
   useEffect(() => {
     const resolverUbicacionReserva = async () => {
-      if (!reserva) return;
-
-      const coords = getReservaCoords(reserva);
-      if (coords.hasCoords || !pisoEfectivo?.IDPiso) {
-        return;
-      }
+      if (!reserva || !pisoEfectivo?.IDPiso) return;
 
       const idPuesto = getReservaIdPuesto(reserva);
       if (!idPuesto) return;
@@ -214,7 +209,9 @@ export default function MapaReservaModal({
         setReservaRender((prev) => ({
           ...(prev || {}),
           ...puesto,
+          // Mantener etiqueta previa solo si existe; de lo contrario usar la del catálogo.
           NoPuesto: getReservaPuestoLabel(prev) ?? getReservaPuestoLabel(puesto),
+          IdPuestoTrabajo: Number(puesto.IdPuestoTrabajo ?? prev?.IdPuestoTrabajo ?? idPuesto),
         }));
       } finally {
         setLoadingUbicacion(false);
@@ -496,16 +493,26 @@ export default function MapaReservaModal({
     // Esto corrige desfases cuando el mapeo fue guardado con otro tamaño de visualización.
     delimitacionesParaDibujar.forEach((d) => {
       const dentroRaw = coords.x >= d.rawX && coords.x <= d.rawX + d.rawW && coords.y >= d.rawY && coords.y <= d.rawY + d.rawH;
-      if (!dentroRaw || d.rawW <= 0 || d.rawH <= 0 || d.w <= 0 || d.h <= 0) return;
+      if (dentroRaw && d.rawW > 0 && d.rawH > 0 && d.w > 0 && d.h > 0) {
+        const relX = (coords.x - d.rawX) / d.rawW;
+        const relY = (coords.y - d.rawY) / d.rawH;
 
-      const relX = (coords.x - d.rawX) / d.rawW;
-      const relY = (coords.y - d.rawY) / d.rawH;
+        candidatos.push({
+          x: d.x + relX * d.w,
+          y: d.y + relY * d.h,
+          tipo: "relativo-delimitacion",
+        });
+      }
 
-      candidatos.push({
-        x: d.x + relX * d.w,
-        y: d.y + relY * d.h,
-        tipo: "relativo-delimitacion",
-      });
+      // 4) Fallback para datos históricos: coordenadas guardadas relativas al área (origen 0,0 en delimitación)
+      const pareceLocal = coords.x >= 0 && coords.y >= 0 && coords.x <= d.rawW && coords.y <= d.rawH;
+      if (pareceLocal && d.rawW > 0 && d.rawH > 0 && d.w > 0 && d.h > 0) {
+        candidatos.push({
+          x: d.x + (coords.x * d.w) / d.rawW,
+          y: d.y + (coords.y * d.h) / d.rawH,
+          tipo: "local-delimitacion",
+        });
+      }
     });
 
     const puntaje = (pt) => {
