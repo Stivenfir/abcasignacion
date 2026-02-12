@@ -37,11 +37,15 @@ export default function PuestoModal({
     const imagen = imagenRef.current;
     const width = imagen.clientWidth;
     const height = imagen.clientHeight;
+    const naturalWidth = imagen.naturalWidth;
+    const naturalHeight = imagen.naturalHeight;
 
-    if (!width || !height) return;
+    if (!width || !height || !naturalWidth || !naturalHeight) return;
 
-    canvas.width = width;
-    canvas.height = height;
+    // Mantener coordenadas en el espacio natural de la imagen para que
+    // la posición guardada sea consistente entre crear/mapear/preview.
+    canvas.width = naturalWidth;
+    canvas.height = naturalHeight;
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
   }, []);
