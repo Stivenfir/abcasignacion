@@ -1,115 +1,150 @@
-import { Link } from "react-router-dom";  
-import { motion } from "framer-motion";  
-  
-const cards = [  
-  {  
-    to: "/mapa",  
-    title: "Mapa de puestos",  
-    description: "Ver disponibilidad y reservar escritorios",  
-    icon: "🗺️",  
-    gradient: "from-blue-50 to-blue-100",  
-  },  
+import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
 
-    {    
-    to: "/areas",  // ← NUEVO CARD  
-    title: "Gestión de Áreas",    
-    description: "Administrar áreas por piso",    
-    icon: "📍",    
-    gradient: "from-purple-50 to-purple-100",    
-  },  
-  
-  {  
-    to: "/mis-reservas",  
-    title: "Mis reservas",  
-    description: "Consultar o cancelar tus reservas activas",  
-    icon: "📋",  
-    gradient: "from-indigo-50 to-indigo-100",  
-  },  
-];  
-  
-export default function Dashboard() {  
-  return (  
-    <div className="max-w-6xl mx-auto">  
-      <motion.div  
-        initial={{ y: -20, opacity: 0 }}  
-        animate={{ y: 0, opacity: 1 }}  
-        transition={{ duration: 0.5 }}  
-      >  
-        <h1 className="text-4xl font-bold text-gray-900 mb-2">Dashboard</h1>  
-        <p className="text-gray-600 mb-8">Bienvenido al sistema de reserva de escritorios</p>  
-      </motion.div>  
-        
-      <div className="grid md:grid-cols-2 gap-6">  
-        {cards.map((card, index) => (  
-          <motion.div  
-            key={card.to}  
-            initial={{ y: 20, opacity: 0 }}  
-            animate={{ y: 0, opacity: 1 }}  
-            transition={{ delay: 0.1 * (index + 1), duration: 0.5 }}  
-          >  
-            <Link to={card.to} className="block group">  
-              <motion.div  
-                whileHover={{ y: -4, scale: 1.02 }}  
-                whileTap={{ scale: 0.98 }}  
-                className={`  
-                  relative rounded-2xl border border-gray-200   
-                  bg-gradient-to-br ${card.gradient}  
-                  p-8 transition-all duration-300  
-                  shadow-sm hover:shadow-lg  
-                  overflow-hidden  
-                `}  
-              >  
-                <div className="relative z-10">  
-                  <div className="flex items-start justify-between mb-4">  
-                    <div className="text-5xl">{card.icon}</div>  
-                    <motion.div  
-                      initial={{ rotate: 0 }}  
-                      whileHover={{ rotate: 45 }}  
-                      transition={{ duration: 0.3 }}  
-                      className="text-gray-400 group-hover:text-blue-600 transition-colors"  
-                    >  
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">  
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />  
-                      </svg>  
-                    </motion.div>  
-                  </div>  
-                    
-                  <h3 className="text-2xl font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">  
-                    {card.title}  
-                  </h3>  
-                  <p className="text-gray-600 text-sm leading-relaxed">  
-                    {card.description}  
-                  </p>  
-                </div>  
-              </motion.div>  
-            </Link>  
-          </motion.div>  
-        ))}  
-      </div>  
-  
-      {/* Stats section */}  
-      <motion.div  
-        initial={{ y: 20, opacity: 0 }}  
-        animate={{ y: 0, opacity: 1 }}  
-        transition={{ delay: 0.4, duration: 0.5 }}  
-        className="mt-8 grid grid-cols-3 gap-4"  
-      >  
-        {[  
-          { label: "Reservas activas", value: "0", icon: "📊" },  
-          { label: "Disponibles hoy", value: "-", icon: "✅" },  
-          { label: "Total escritorios", value: "-", icon: "🪑" },  
-        ].map((stat) => (  
-          <motion.div  
-            key={stat.label}  
-            whileHover={{ y: -2 }}  
-            className="bg-white border border-gray-200 rounded-xl p-4 text-center shadow-sm hover:shadow-md transition-shadow"  
-          >  
-            <div className="text-2xl mb-2">{stat.icon}</div>  
-            <div className="text-2xl font-bold text-gray-900 mb-1">{stat.value}</div>  
-            <div className="text-xs text-gray-600">{stat.label}</div>  
-          </motion.div>  
-        ))}  
-      </motion.div>  
-    </div>  
-  );  
+const cards = [
+  {
+    to: "/mapa",
+    title: "Mapa de puestos",
+    description: "Visualiza disponibilidad y reserva escritorios en segundos.",
+    icon: "🗺️",
+    gradient: "from-blue-50 to-blue-100",
+  },
+  {
+    to: "/areas",
+    title: "Gestión de Áreas",
+    description: "Administra áreas, delimitaciones y relación por piso.",
+    icon: "📍",
+    gradient: "from-purple-50 to-purple-100",
+  },
+  {
+    to: "/mis-reservas",
+    title: "Mis reservas",
+    description: "Consulta, confirma o cancela tus reservas activas.",
+    icon: "📋",
+    gradient: "from-indigo-50 to-indigo-100",
+  },
+];
+
+const stats = [
+  {
+    label: "Estado del sistema",
+    value: "Operativo",
+    icon: "🟢",
+    detail: "Sin incidencias críticas",
+  },
+  {
+    label: "Módulos clave",
+    value: "Reservas + Puestos",
+    icon: "🧩",
+    detail: "Listos para operar",
+  },
+  {
+    label: "Experiencia",
+    value: "Optimizada",
+    icon: "✨",
+    detail: "UI alineada y consistente",
+  },
+];
+
+export default function Dashboard() {
+  const hoy = new Date().toLocaleDateString("es-CO", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+
+  return (
+    <div className="max-w-6xl mx-auto space-y-6">
+      <motion.div
+        initial={{ y: -16, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.35 }}
+        className="rounded-2xl border border-blue-100 bg-gradient-to-r from-white via-blue-50/60 to-indigo-50/50 p-6 shadow-sm"
+      >
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900">Dashboard</h1>
+            <p className="text-gray-600 mt-1">
+              Bienvenido al sistema de reserva de escritorios
+            </p>
+          </div>
+          <div className="px-4 py-2 rounded-xl bg-white border border-gray-200 text-sm text-gray-700 shadow-sm">
+            📅 {hoy}
+          </div>
+        </div>
+      </motion.div>
+
+      <div className="grid md:grid-cols-2 gap-6">
+        {cards.map((card, index) => (
+          <motion.div
+            key={card.to}
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.08 * (index + 1), duration: 0.35 }}
+          >
+            <Link to={card.to} className="block group">
+              <motion.div
+                whileHover={{ y: -4, scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                className={`relative rounded-2xl border border-gray-200 bg-gradient-to-br ${card.gradient} p-8 transition-all duration-300 shadow-sm hover:shadow-lg overflow-hidden`}
+              >
+                <div className="relative z-10">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="text-5xl">{card.icon}</div>
+                    <motion.div
+                      initial={{ x: 0 }}
+                      whileHover={{ x: 3 }}
+                      className="text-gray-400 group-hover:text-blue-600 transition-colors"
+                    >
+                      <svg
+                        className="w-6 h-6"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M14 5l7 7m0 0l-7 7m7-7H3"
+                        />
+                      </svg>
+                    </motion.div>
+                  </div>
+
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">
+                    {card.title}
+                  </h3>
+                  <p className="text-gray-600 text-sm leading-relaxed">
+                    {card.description}
+                  </p>
+                </div>
+              </motion.div>
+            </Link>
+          </motion.div>
+        ))}
+      </div>
+
+      <motion.div
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.25, duration: 0.35 }}
+        className="grid grid-cols-1 md:grid-cols-3 gap-4"
+      >
+        {stats.map((stat) => (
+          <motion.div
+            key={stat.label}
+            whileHover={{ y: -2 }}
+            className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow"
+          >
+            <div className="text-2xl mb-2">{stat.icon}</div>
+            <p className="text-sm text-gray-500">{stat.label}</p>
+            <p className="text-lg font-semibold text-gray-900 mt-1">{stat.value}</p>
+            <p className="text-xs text-gray-500 mt-1">{stat.detail}</p>
+          </motion.div>
+        ))}
+      </motion.div>
+    </div>
+  );
 }
