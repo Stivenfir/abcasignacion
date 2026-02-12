@@ -43,18 +43,40 @@ export function useReservas() {
 
       const headers = { Authorization: `Bearer ${token}` };
 
-      const [resPisos, resReservas] = await Promise.allSettled([
+      const [resPisos, resReservas, resCatalogoPisos] = await Promise.allSettled([
         fetchConTimeout(`${API}/api/reservas/pisos-habilitados`, { headers }),
         fetchConTimeout(`${API}/api/reservas/empleado`, { headers }),
+        fetchConTimeout(`${API}/api/pisos`),
       ]);
 
       if (resPisos.status === "fulfilled" && resPisos.value.ok) {
         const dataPisos = await resPisos.value.json();
-        const pisosHabilitados = Array.isArray(dataPisos)
+        const pisosHabilitadosBase = Array.isArray(dataPisos)
           ? dataPisos
           : Array.isArray(dataPisos?.pisos)
             ? dataPisos.pisos
             : [];
+
+        const catalogoPisos =
+          resCatalogoPisos.status === "fulfilled" && resCatalogoPisos.value.ok
+            ? await resCatalogoPisos.value.json()
+            : [];
+
+        const mapaCatalogo = new Map(
+          (Array.isArray(catalogoPisos) ? catalogoPisos : []).map((piso) => [
+            Number(piso.IDPiso),
+            piso,
+          ]),
+        );
+
+        const pisosHabilitados = pisosHabilitadosBase.map((piso) => {
+          const catalogo = mapaCatalogo.get(Number(piso.IDPiso));
+          return {
+            ...piso,
+            NumeroPiso: catalogo?.NumeroPiso ?? piso.NumeroPiso ?? piso.IDPiso,
+            Bodega: catalogo?.Bodega ?? piso.Bodega ?? "Sin bodega",
+          };
+        });
 
         const scope = ["global", "all-pisos"].includes(dataPisos?.scope)
           ? dataPisos.scope
