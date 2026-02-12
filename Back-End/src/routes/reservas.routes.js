@@ -324,21 +324,21 @@ router.post("/", authenticateToken, async (req, res) => {
     return res.status(400).json({ error: "Formato de fecha inválido. Usa YYYY-MM-DD" });
   }
 
-  // ✅ VALIDACIÓN 1: No permitir fechas pasadas  
+  // ✅ VALIDACIÓN 1: Reserva mínima con 1 día de antelación (no hoy ni pasadas)
   const fechaReserva = new Date(`${fecha}T00:00:00`);  
   const hoy = new Date();  
   hoy.setHours(0, 0, 0, 0);  
   fechaReserva.setHours(0, 0, 0, 0);  
   
-  if (fechaReserva < hoy) {  
+  if (fechaReserva <= hoy) {  
     logAuditoria('CREAR_RESERVA', usuario, {  
       idEmpleado,  
       fecha,  
       resultado: 'error',  
-      error: 'Intento de reservar en fecha pasada'  
+      error: 'Intento de reservar sin antelación mínima (hoy o pasada)'  
     });  
     return res.status(400).json({  
-      error: "No se pueden crear reservas en fechas pasadas"  
+      error: "La reserva debe realizarse con al menos 1 día de anticipación"  
     });  
   }  
         

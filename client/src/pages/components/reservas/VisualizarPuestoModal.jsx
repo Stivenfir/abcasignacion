@@ -243,13 +243,13 @@ export default function VisualizarPuestoModal({
                 backgroundColor: '#F9FAFB'  
               }}  
             >  
-              <div style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'center' }}>  
+              <div style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top left' }}>  
                 <div className="relative inline-block">  
                   <img  
                     ref={imagenRef}  
                     src={planoUrl}  
                     alt="Plano del piso"  
-                    className="h-auto max-w-none"  
+                    className="max-w-full h-auto"  
                     onLoad={(e) => {  
                       if (canvasRef.current) {  
                         canvasRef.current.width = e.target.width;  
