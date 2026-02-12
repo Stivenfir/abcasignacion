@@ -131,6 +131,12 @@ export default function MisReservas() {
     setModalVisualizacion(true);
   };
 
+
+  const handleVerMapaReserva = () => {
+    navigate("/mapa");
+  };
+
+
   if (reservasData.loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -236,6 +242,7 @@ export default function MisReservas() {
             loadingReservas={reservasData.loadingReservas}
             onSolicitarReserva={handleSolicitarReserva}
             onCancelarReserva={reservasData.cancelarReserva}
+            onVerMapaReserva={handleVerMapaReserva}
           />
         </div>
       </motion.main>

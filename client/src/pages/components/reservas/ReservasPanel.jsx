@@ -10,6 +10,7 @@ export default function ReservasPanel({
   loadingReservas,
   onSolicitarReserva,
   onCancelarReserva,
+  onVerMapaReserva,
 }) {
   const [fechaSeleccionada, setFechaSeleccionada] = useState(null);
   const [vistaActual, setVistaActual] = useState("calendario");
@@ -112,6 +113,8 @@ export default function ReservasPanel({
                 reservas={reservas}
                 loadingReservas={loadingReservas}
                 onCancelarReserva={onCancelarReserva}
+                onVerMapaReserva={onVerMapaReserva}
+                pisoSeleccionado={pisoSeleccionado}
               />
             </motion.div>
           )}
