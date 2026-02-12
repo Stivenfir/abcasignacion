@@ -41,6 +41,22 @@ function normalizeAreaId(rawArea) {
 
 
 
+
+
+async function obtenerCatalogoPisos() {
+  const rtaPisos = await GetData("GetPisos=''");
+  if (!rtaPisos || rtaPisos.trim().startsWith('Array') || rtaPisos.trim().startsWith(':')) {
+    return [];
+  }
+
+  try {
+    const data = JSON.parse(rtaPisos.trim())["data"];
+    return Array.isArray(data) ? data : [];
+  } catch (_error) {
+    return [];
+  }
+}
+
 function logAuditoria(accion, usuario, detalles) {        
   const timestamp = new Date().toISOString();        
   const logEntry = { timestamp, accion, usuario, ...detalles };        
@@ -135,10 +151,27 @@ router.get("/pisos-habilitados", authenticateToken, async (req, res) => {
       pisosMap.set(idPiso, actual);
     }
 
-    const pisos = Array.from(pisosMap.values()).sort((a, b) =>
-      (Number(a.Bodega) || 0) - (Number(b.Bodega) || 0) ||
-      (Number(a.NumeroPiso) || 0) - (Number(b.NumeroPiso) || 0),
+    const catalogoPisos = await obtenerCatalogoPisos();
+    const catalogoPorId = new Map(
+      catalogoPisos
+        .map((p) => [Number(p.IDPiso), p])
+        .filter(([id]) => Number.isInteger(id) && id > 0),
     );
+
+    const pisos = Array.from(pisosMap.values())
+      .map((piso) => {
+        const meta = catalogoPorId.get(Number(piso.IDPiso));
+        return {
+          ...piso,
+          NumeroPiso: meta?.NumeroPiso ?? piso.NumeroPiso,
+          Bodega: meta?.Bodega ?? piso.Bodega,
+        };
+      })
+      .sort(
+        (a, b) =>
+          (Number(a.Bodega) || 0) - (Number(b.Bodega) || 0) ||
+          (Number(a.NumeroPiso) || 0) - (Number(b.NumeroPiso) || 0),
+      );
 
     logAuditoria('CONSULTAR_PISOS_HABILITADOS', usuario, {
       idArea,
