@@ -26,7 +26,7 @@ export default function ReservasPanel({
               Selecciona un piso  
             </h3>  
             <p className="text-gray-500">  
-              Elige un piso de la lista para ver disponibilidad y hacer reservas  
+              Elige un piso habilitado de tu área para reservar automáticamente un puesto  
             </p>  
           </div>  
         </div>  
@@ -49,7 +49,7 @@ export default function ReservasPanel({
                   Piso {pisoSeleccionado.NumeroPiso}  
                 </h3>  
                 <p className="text-sm text-gray-500">  
-                  Bodega {pisoSeleccionado.Bodega} • ID: {pisoSeleccionado.IDPiso}  
+                  Bodega {pisoSeleccionado.Bodega} • Asignación automática por área  
                 </p>  
               </div>  
             </div>  

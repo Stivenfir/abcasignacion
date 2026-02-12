@@ -28,20 +28,11 @@ export default function MisReservas() {
         return;
       }
 
-      console.log(
-        "📍 Solicitando puestos disponibles para fecha:",
-        fechaSeleccionada,
-      );
-      console.log("📍 Piso seleccionado:", reservasData.pisoSeleccionado);
-
       const token = localStorage.getItem("token");
-
       const fechaFormateada = new Date(fechaSeleccionada)
         .toISOString()
         .split("T")[0];
-      const url = `${API}/api/reservas/disponibles/${fechaFormateada}`;
-
-      console.log("📍 URL:", url);
+      const url = `${API}/api/reservas/disponibles/${fechaFormateada}?idPiso=${reservasData.pisoSeleccionado.IDPiso}`;
 
       const res = await fetch(url, {
         headers: {
@@ -49,22 +40,16 @@ export default function MisReservas() {
         },
       });
 
-      console.log("📍 Response status:", res.status);
-      console.log("📍 Response ok:", res.ok);
-
       if (!res.ok) {
         const errorText = await res.text();
-        console.error("❌ Error response:", errorText);
         throw new Error(`HTTP ${res.status}: ${errorText}`);
       }
 
       const puestosDisponibles = await res.json();
-      console.log("✅ Puestos disponibles:", puestosDisponibles);
-
       if (!puestosDisponibles || puestosDisponibles.length === 0) {
         reservasData.setMensaje({
           tipo: "error",
-          texto: "✗ No hay puestos disponibles para esta fecha",
+          texto: "✗ No hay puestos disponibles en tu piso para esa fecha",
         });
         return;
       }
@@ -79,8 +64,7 @@ export default function MisReservas() {
 
       setModalConfirmacion(true);
     } catch (error) {
-      console.error("❌ Error completo:", error);
-      console.error("❌ Stack trace:", error.stack);
+      console.error("Error al solicitar reserva:", error);
       reservasData.setMensaje({
         tipo: "error",
         texto: `✗ ${error.message}`,
@@ -90,8 +74,6 @@ export default function MisReservas() {
 
   const handleConfirmarReserva = async () => {
     try {
-      console.log("📍 Confirmando reserva con:", reservaPendiente);
-
       if (!reservaPendiente?.puestoAsignado?.IdPuestoTrabajo) {
         throw new Error("No se pudo obtener el ID del puesto");
       }
@@ -101,16 +83,10 @@ export default function MisReservas() {
       }
 
       const token = localStorage.getItem("token");
-
       const fechaFormateada =
         reservaPendiente.fecha instanceof Date
           ? reservaPendiente.fecha.toISOString().split("T")[0]
           : reservaPendiente.fecha;
-
-      console.log("📍 Datos a enviar:", {
-        idPuestoTrabajo: reservaPendiente.puestoAsignado.IdPuestoTrabajo,
-        fecha: fechaFormateada,
-      });
 
       const res = await fetch(`${API}/api/reservas`, {
         method: "POST",
@@ -126,12 +102,9 @@ export default function MisReservas() {
         }),
       });
 
-      console.log("📍 Response status:", res.status);
-
       if (!res.ok) {
         const errorData = await res.json();
-        console.error("❌ Error del servidor:", errorData);
-        throw new Error("Error al crear la reserva");
+        throw new Error(errorData.error || "Error al crear la reserva");
       }
 
       reservasData.setMensaje({
@@ -190,7 +163,16 @@ export default function MisReservas() {
         </div>
       </header>
 
-      {reservasData.mensaje && (
+
+      {reservasData.pisos.length === 0 && (
+        <div className="mx-6 mt-4 p-4 rounded-xl bg-yellow-50 border border-yellow-200 text-yellow-800">
+          <p className="font-medium">
+            ⚠️ Tu área no tiene pisos habilitados para reservar. Contacta al administrador.
+          </p>
+        </div>
+      )}
+
+            {reservasData.mensaje && (
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}

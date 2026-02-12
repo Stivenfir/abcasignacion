@@ -25,6 +25,33 @@ function logAuditoria(accion, usuario, detalles) {
   const logEntry = { timestamp, accion, usuario, ...detalles };        
   console.log('[AUDIT]', JSON.stringify(logEntry));        
 }        
+
+
+function normalizarFechaParaSQL(fechaInput) {
+  if (!fechaInput) return null;
+
+  // Si viene como YYYY-MM-DD, evitar problemas de zona horaria
+  const soloFecha = String(fechaInput).slice(0, 10);
+  const matchISO = /^\d{4}-\d{2}-\d{2}$/.test(soloFecha);
+
+  let fecha;
+  if (matchISO) {
+    const [y, m, d] = soloFecha.split("-").map(Number);
+    fecha = new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
+  } else {
+    fecha = new Date(fechaInput);
+  }
+
+  if (Number.isNaN(fecha.getTime())) return null;
+
+  const yyyy = fecha.getUTCFullYear();
+  const mm = String(fecha.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(fecha.getUTCDate()).padStart(2, '0');
+
+  // Formato seguro para SQL Server con estilo ISO local sin timezone.
+  return `${yyyy}-${mm}-${dd} 00:00:00`;
+}
+
         
 // GET - Obtener las 1000 reservas más recientes de un empleado         
 router.get("/empleado", authenticateToken, async (req, res) => {      
@@ -73,16 +100,69 @@ router.get("/empleado", authenticateToken, async (req, res) => {
   }      
 });     
         
+
+// GET - Obtener pisos habilitados para el área del usuario
+router.get("/pisos-habilitados", authenticateToken, async (req, res) => {
+  const idArea = req.user.idArea;
+  const usuario = req.user.username;
+
+  try {
+    const query = `
+      SELECT DISTINCT
+        P.IDPiso,
+        P.NumeroPiso,
+        P.Bodega,
+        COUNT(PT.IdPuestoTrabajo) as TotalPuestosArea
+      FROM ABCDeskBooking.dbo.Piso P
+      INNER JOIN ABCDeskBooking.dbo.AreaPiso AP ON AP.IdPiso = P.IDPiso
+      INNER JOIN ABCDeskBooking.dbo.PuestoTrabajo PT ON PT.IdAreaPiso = AP.IdAreaPiso
+      WHERE AP.IdArea = ${idArea}
+      GROUP BY P.IDPiso, P.NumeroPiso, P.Bodega
+      ORDER BY P.Bodega, P.NumeroPiso
+    `;
+
+    const Rta = await GetData(`ConsultaSQL=${encodeURIComponent(query)}`);
+
+    if (!Rta || Rta.trim().startsWith('Array') || Rta.trim().startsWith(':')) {
+      return res.json([]);
+    }
+
+    const D = JSON.parse(Rta.trim())["data"];
+    const pisos = Array.isArray(D) ? D : [];
+
+    logAuditoria('CONSULTAR_PISOS_HABILITADOS', usuario, {
+      idArea,
+      resultado: 'success',
+      cantidad: pisos.length,
+    });
+
+    return res.json(pisos);
+  } catch (error) {
+    console.error('Error al obtener pisos habilitados:', error);
+    logAuditoria('CONSULTAR_PISOS_HABILITADOS', usuario, {
+      idArea,
+      resultado: 'error',
+      error: error.message,
+    });
+    return res.status(500).json({ message: error.message });
+  }
+});
+
 // GET - Obtener puestos disponibles para una fecha específica      
 router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {            
   const { fecha } = req.params;      
   const { idPiso } = req.query;      
   const usuario = req.user.username;  
   const idArea = req.user.idArea;  // ✅ AGREGAR: Extraer idArea del token JWT  
+  const fechaSQL = normalizarFechaParaSQL(fecha);
+
+  if (!fechaSQL) {
+    return res.status(400).json({ message: "Fecha inválida. Usa formato YYYY-MM-DD" });
+  }
             
   try {  
-    // ✅ MODIFICAR: Pasar @IdArea al stored procedure  
-    var Rta = await GetData(`ConsultaReservas=@P%3D2,@Fecha%3D'${fecha}',@IdArea%3D${idArea}`);  
+    // Usar fecha normalizada y comillas codificadas para evitar errores de conversión DATETIME.
+    var Rta = await GetData(`ConsultaReservas=@P%3D2,@Fecha%3D%27${encodeURIComponent(fechaSQL)}%27,@IdArea%3D${idArea}`);  
             
     if (!Rta || Rta.trim().startsWith('Array') || Rta.trim().startsWith(':')) {            
       console.error('Error de BD:', Rta);          
@@ -122,6 +202,21 @@ router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {
     if (idPiso && Array.isArray(D)) {      
       D = D.filter(puesto => puesto.IdPiso == idPiso);      
     }      
+
+    // Orden estable para asignación automática (el frontend toma el primero)
+    D.sort((a, b) => {
+      const pisoA = Number(a.IdPiso) || 0;
+      const pisoB = Number(b.IdPiso) || 0;
+      if (pisoA !== pisoB) return pisoA - pisoB;
+
+      const puestoA = Number(a.NoPuesto);
+      const puestoB = Number(b.NoPuesto);
+      if (!Number.isNaN(puestoA) && !Number.isNaN(puestoB) && puestoA !== puestoB) {
+        return puestoA - puestoB;
+      }
+
+      return (Number(a.IdPuestoTrabajo) || 0) - (Number(b.IdPuestoTrabajo) || 0);
+    });
             
     logAuditoria('CONSULTAR_PUESTOS_DISPONIBLES', usuario, {            
       fecha,      
