@@ -148,6 +148,13 @@ export default function MisReservas() {
       return false;
     }) || null;
 
+    if (!pisoReserva) {
+      reservasData.setMensaje({
+        tipo: "error",
+        texto: "✗ Esta reserva no trae piso identificado. No se puede ubicar de forma confiable en el mapa.",
+      });
+    }
+
     setReservaMapaSeleccionada({
       ...reserva,
       __pisoSeleccionado: pisoReserva,
@@ -291,9 +298,7 @@ export default function MisReservas() {
       {modalMapaReserva && reservaMapaSeleccionada && (
         <MapaReservaModal
           reserva={reservaMapaSeleccionada}
-          pisoSeleccionado={
-            reservaMapaSeleccionada.__pisoSeleccionado || reservasData.pisoSeleccionado
-          }
+          pisoSeleccionado={reservaMapaSeleccionada.__pisoSeleccionado || null}
           areaAsignada={{
             NombreArea: reservaMapaSeleccionada.NombreArea || "Área asignada",
             IdArea: reservaMapaSeleccionada.IdArea || null,

@@ -310,6 +310,7 @@ router.post("/", authenticateToken, async (req, res) => {
   const { idPuestoTrabajo, fecha } = req.body;  
   const idEmpleado = req.user.idEmpleado;  
   const usuario = req.user.username;        
+  const idArea = normalizeAreaId(req.user.idArea);
         
   // Validar parámetros        
   if (!idPuestoTrabajo || !fecha) {        
@@ -318,6 +319,11 @@ router.post("/", authenticateToken, async (req, res) => {
     });        
   }  
     
+  const fechaSql = toSqlDateYYYYMMDD(fecha);
+  if (!fechaSql) {
+    return res.status(400).json({ error: "Formato de fecha inválido. Usa YYYY-MM-DD" });
+  }
+
   // ✅ VALIDACIÓN 1: No permitir fechas pasadas  
   const fechaReserva = new Date(`${fecha}T00:00:00`);  
   const hoy = new Date();  
@@ -370,9 +376,32 @@ router.post("/", authenticateToken, async (req, res) => {
       }  
     }  
         
-    const fechaSql = toSqlDateYYYYMMDD(fecha);
-    if (!fechaSql) {
-      return res.status(400).json({ error: "Fecha inválida. Usa formato YYYY-MM-DD" });
+    // ✅ VALIDACIÓN 3: El puesto debe seguir disponible y mapeado para la fecha solicitada
+    const rtaDisponibles = await GetData(
+      `ConsultaReservas=@P%3D2,@Fecha%3D'${fechaSql}'${idArea ? `,@IdArea%3D${idArea}` : ''}`,
+    );
+
+    if (!rtaDisponibles || rtaDisponibles.trim().startsWith('Array') || rtaDisponibles.trim().startsWith(':')) {
+      return res.status(503).json({ message: "No fue posible validar disponibilidad del puesto" });
+    }
+
+    const dataDisponibles = JSON.parse(rtaDisponibles.trim())["data"];
+    const disponibles = (Array.isArray(dataDisponibles) ? dataDisponibles : [])
+      .filter(esPuestoReservable)
+      .filter((p) => Number(p?.IdPuestoTrabajo) === Number(idPuestoTrabajo));
+
+    if (!disponibles.length) {
+      logAuditoria('CREAR_RESERVA', usuario, {
+        idEmpleado,
+        idPuestoTrabajo,
+        fecha,
+        idArea,
+        resultado: 'error',
+        error: 'Puesto no disponible para la fecha solicitada',
+      });
+      return res.status(400).json({
+        error: "El puesto seleccionado ya no está disponible para esa fecha. Actualiza y vuelve a intentar.",
+      });
     }
 
     // Crear la reserva  
