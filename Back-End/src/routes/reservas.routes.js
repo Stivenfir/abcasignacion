@@ -53,6 +53,54 @@ function esPuestoReservable(puesto) {
   return esPuestoDisponible(puesto) && esPuestoMapeado(puesto);
 }
 
+const FESTIVOS_FIJOS_MMDD = new Set([
+  "01-01", // Año Nuevo
+  "05-01", // Día del Trabajo
+  "07-20", // Independencia
+  "08-07", // Batalla de Boyacá
+  "12-08", // Inmaculada Concepción
+  "12-25", // Navidad
+]);
+
+function toLocalDateFromYYYYMMDD(value) {
+  if (!value) return null;
+  const parsed = new Date(`${value}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function isDomingo(fecha) {
+  return fecha?.getDay?.() === 0;
+}
+
+function isFestivo(fecha) {
+  if (!fecha) return false;
+
+  const mm = String(fecha.getMonth() + 1).padStart(2, '0');
+  const dd = String(fecha.getDate()).padStart(2, '0');
+  const mmdd = `${mm}-${dd}`;
+  if (FESTIVOS_FIJOS_MMDD.has(mmdd)) return true;
+
+  const ymd = `${fecha.getFullYear()}-${mm}-${dd}`;
+  const festivosCustom = String(process.env.FESTIVOS_YYYYMMDD || "")
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  return festivosCustom.includes(ymd);
+}
+
+function getHoraInicioReserva() {
+  const parsed = Number(process.env.HORA_INICIO_RESERVA || 8);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 23 ? parsed : 8;
+}
+
+function getInicioJornadaReserva(fecha) {
+  if (!fecha) return null;
+  const dt = new Date(fecha);
+  dt.setHours(getHoraInicioReserva(), 0, 0, 0);
+  return dt;
+}
+
 
 function logAuditoria(accion, usuario, detalles) {        
   const timestamp = new Date().toISOString();        
@@ -184,6 +232,15 @@ router.get("/disponibles/:fecha", authenticateToken, async (req, res) => {
     const fechaSql = toSqlDateYYYYMMDD(fecha);
     if (!fechaSql) {
       return res.status(400).json({ message: "Fecha inválida. Usa formato YYYY-MM-DD" });
+    }
+
+    const fechaLocal = toLocalDateFromYYYYMMDD(fecha);
+    if (!fechaLocal) {
+      return res.status(400).json({ message: "Fecha inválida. Usa formato YYYY-MM-DD" });
+    }
+
+    if (isDomingo(fechaLocal) || isFestivo(fechaLocal)) {
+      return res.json([]);
     }
 
     // ✅ MODIFICAR: Pasar @IdArea al stored procedure  
@@ -324,6 +381,17 @@ router.post("/", authenticateToken, async (req, res) => {
     return res.status(400).json({ error: "Formato de fecha inválido. Usa YYYY-MM-DD" });
   }
 
+  const fechaReservaLocal = toLocalDateFromYYYYMMDD(fecha);
+  if (!fechaReservaLocal) {
+    return res.status(400).json({ error: "Formato de fecha inválido. Usa YYYY-MM-DD" });
+  }
+
+  if (isDomingo(fechaReservaLocal) || isFestivo(fechaReservaLocal)) {
+    return res.status(400).json({
+      error: "No se pueden crear reservas en domingos o días festivos",
+    });
+  }
+
   // ✅ VALIDACIÓN 1: Reserva mínima con 1 día de antelación (no hoy ni pasadas)
   const fechaReserva = new Date(`${fecha}T00:00:00`);  
   const hoy = new Date();  
@@ -445,7 +513,7 @@ router.post("/", authenticateToken, async (req, res) => {
 // PUT - Cancelar una reserva        
 router.put("/:idReserva/cancelar", authenticateToken, async (req, res) => {        
   const { idReserva } = req.params;        
-  const { observacion } = req.body;  // ✅ Solo observacion del body    
+  const { observacion, emergencia, idPuestoTrabajo } = req.body;  // ✅ observacion + flag emergencia    
   const idEmpleado = req.user.idEmpleado;  // ✅ Del token JWT    
   const usuario = req.user.username;        
         
@@ -459,12 +527,58 @@ router.put("/:idReserva/cancelar", authenticateToken, async (req, res) => {
   logAuditoria('CANCELAR_RESERVA', usuario, {        
     idReserva,        
     idEmpleado,        
-    observacion        
+    observacion,
+    idPuestoTrabajo: idPuestoTrabajo ?? null
   });        
         
   try {        
-    // SP_EditReservas con @P=1 para cancelar reserva        
-    var Rta = await GetData(`EditReservas=@P%3D1,@IdEmpleadoPuestoTrabajo%3D${idReserva},@Obs%3D${encodeURIComponent(observacion)},@IdEmpleado%3D${idEmpleado}`);        
+    const reservasEmpleado = await GetData(`ConsultaReservas=@P%3D0,@IdEmpleado%3D${idEmpleado}`);
+    if (!reservasEmpleado || reservasEmpleado.trim().startsWith('Array') || reservasEmpleado.trim().startsWith(':')) {
+      return res.status(503).json({ message: "No fue posible validar la reserva antes de cancelar" });
+    }
+
+    const dataReservas = JSON.parse(reservasEmpleado.trim())["data"];
+    const reserva = (Array.isArray(dataReservas) ? dataReservas : []).find(
+      (r) => Number(r?.IdEmpleadoPuestoTrabajo) === Number(idReserva),
+    );
+
+    if (!reserva) {
+      return res.status(404).json({ error: "Reserva no encontrada" });
+    }
+
+    if (!reserva?.ReservaActiva) {
+      return res.status(400).json({ error: "La reserva ya no está activa" });
+    }
+
+    const fechaBase = String(reserva?.FechaReserva || '').split(' ')[0];
+    const fechaReserva = toLocalDateFromYYYYMMDD(fechaBase);
+    const inicioJornada = getInicioJornadaReserva(fechaReserva);
+
+    if (inicioJornada) {
+      const limiteCancelacion = new Date(inicioJornada.getTime() - 60 * 60 * 1000);
+      const fueraDeTiempo = new Date() > limiteCancelacion;
+      const esEmergencia = emergencia === true || emergencia === 1 || String(emergencia).toLowerCase() === 'true';
+
+      if (fueraDeTiempo && !esEmergencia) {
+        return res.status(400).json({
+          code: "CANCELACION_FUERA_DE_TIEMPO",
+          error: "La cancelación normal debe hacerse al menos 1 hora antes del inicio de la jornada",
+        });
+      }
+    }
+
+    const idPuestoEfectivo = Number(idPuestoTrabajo) || Number(reserva?.IdPuestoTrabajo) || null;
+
+    // SP_EditReservas con @P=1 para cancelar reserva
+    const parametrosCancelacion = [
+      `EditReservas=@P%3D1`,
+      `@IdEmpleadoPuestoTrabajo%3D${idReserva}`,
+      `@Obs%3D${encodeURIComponent(observacion)}`,
+      `@IdEmpleado%3D${idEmpleado}`,
+      idPuestoEfectivo ? `@IdPuestoTrabajo%3D${idPuestoEfectivo}` : null,
+    ].filter(Boolean).join(',');
+
+    var Rta = await GetData(parametrosCancelacion);        
         
     // ✅ Validar formato PHP inválido      
     if (!Rta || Rta.trim().startsWith('Array') || Rta.trim().startsWith(':')) {        

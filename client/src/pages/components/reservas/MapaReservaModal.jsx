@@ -58,6 +58,15 @@ function toDisplayPoint(valueX, valueY, metrics) {
   const y = Number(valueY);
   if (!Number.isFinite(x) || !Number.isFinite(y) || !metrics) return null;
 
+  const coordenadasNormalizadas = x >= 0 && y >= 0 && x <= 1 && y <= 1;
+  if (coordenadasNormalizadas) {
+    return {
+      x: x * metrics.displayWidth,
+      y: y * metrics.displayHeight,
+      source: "normalized",
+    };
+  }
+
   const yaEnDisplay = x >= 0 && y >= 0 && x <= metrics.displayWidth && y <= metrics.displayHeight;
   if (yaEnDisplay) {
     return { x, y, source: "display" };
@@ -166,8 +175,7 @@ export default function MapaReservaModal({
     const resolverUbicacionReserva = async () => {
       if (!reserva) return;
 
-      const coords = getReservaCoords(reserva);
-      if (coords.hasCoords || !pisoEfectivo?.IDPiso) {
+      if (!pisoEfectivo?.IDPiso) {
         return;
       }
 
@@ -206,6 +214,9 @@ export default function MapaReservaModal({
           ...(prev || {}),
           ...puesto,
           NoPuesto: getReservaPuestoLabel(prev) ?? getReservaPuestoLabel(puesto),
+          // Siempre priorizamos coordenadas actuales del catálogo de puestos.
+          UbicacionX: puesto?.UbicacionX,
+          UbicacionY: puesto?.UbicacionY,
         }));
       } finally {
         setLoadingUbicacion(false);
@@ -415,8 +426,24 @@ export default function MapaReservaModal({
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const delimitacionesValidas = (Array.isArray(delimitacionesArea) ? delimitacionesArea : [])
-      .map((d) => toDisplayRect(d, metrics))
-      .filter((d) => d && [d.x, d.y, d.w, d.h].every(Number.isFinite));
+      .map((d) => {
+        const rectDisplay = toDisplayRect(d, metrics);
+        const rawX = Number(d?.PosicionX);
+        const rawY = Number(d?.PosicionY);
+        const rawW = Number(d?.Ancho);
+        const rawH = Number(d?.Alto);
+
+        if (!rectDisplay || ![rawX, rawY, rawW, rawH].every(Number.isFinite)) return null;
+
+        return {
+          ...rectDisplay,
+          rawX,
+          rawY,
+          rawW,
+          rawH,
+        };
+      })
+      .filter((d) => d && [d.x, d.y, d.w, d.h, d.rawX, d.rawY, d.rawW, d.rawH].every(Number.isFinite));
 
     const puntoBasePreview = coords.hasCoords ? toDisplayPoint(coords.x, coords.y, metrics) : null;
     const delimitacionesParaDibujar = (() => {
@@ -460,20 +487,27 @@ export default function MapaReservaModal({
       candidatos.push({ x: puntoBase.x, y: puntoBase.y, tipo: puntoBase.source });
     }
 
-    // 2) Coordenadas normalizadas 0..1
-    if (coords.x >= 0 && coords.x <= 1 && coords.y >= 0 && coords.y <= 1) {
-      candidatos.push({
-        x: coords.x * metrics.displayWidth,
-        y: coords.y * metrics.displayHeight,
-        tipo: "normalizado",
-      });
-    }
-
-    // 3) Coordenadas guardadas en escala natural de la imagen
+    // 2) Coordenadas guardadas en escala natural de la imagen
     candidatos.push({
       x: (coords.x * metrics.displayWidth) / metrics.naturalWidth,
       y: (coords.y * metrics.displayHeight) / metrics.naturalHeight,
       tipo: "natural-a-display",
+    });
+
+    // 3) Coordenadas relativas a la delimitación que contiene el punto original.
+    // Esto corrige desfases cuando el mapeo fue guardado con otro tamaño de visualización.
+    delimitacionesParaDibujar.forEach((d) => {
+      const dentroRaw = coords.x >= d.rawX && coords.x <= d.rawX + d.rawW && coords.y >= d.rawY && coords.y <= d.rawY + d.rawH;
+      if (!dentroRaw || d.rawW <= 0 || d.rawH <= 0 || d.w <= 0 || d.h <= 0) return;
+
+      const relX = (coords.x - d.rawX) / d.rawW;
+      const relY = (coords.y - d.rawY) / d.rawH;
+
+      candidatos.push({
+        x: d.x + relX * d.w,
+        y: d.y + relY * d.h,
+        tipo: "relativo-delimitacion",
+      });
     });
 
     const puntaje = (pt) => {
@@ -572,7 +606,7 @@ export default function MapaReservaModal({
         animate={{ opacity: 1, scale: 1 }}  
         exit={{ opacity: 0, scale: 0.95 }}  
         onClick={(e) => e.stopPropagation()}  
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col"  
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col"  
       >  
         {/* Header */}  
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-green-50 to-emerald-50 rounded-t-2xl">  
@@ -589,7 +623,7 @@ export default function MapaReservaModal({
             className="w-10 h-10 rounded-full hover:bg-white/80 flex items-center justify-center transition text-gray-600 hover:text-gray-900"  
           >  
             <span className="text-2xl">✕</span>  
-          </button>  
+          </button>
         </div>  
   
         {/* Contenido */}  
@@ -625,20 +659,22 @@ export default function MapaReservaModal({
                   Este registro no tiene coordenadas guardadas, pero puedes ubicarte por piso y área.
                 </div>
               ) : null}
-              <div className="relative inline-block border-2 border-gray-300 rounded-lg overflow-hidden shadow-lg">  
-                <img  
-                  ref={imagenRef}  
-                  src={planoUrl}  
-                  alt="Plano del piso"  
-                  className="max-w-full h-auto block"  
-                  onLoad={() => {
-                    dibujarPuestoAsignado();
-                  }}
-                />  
-                <canvas  
-                  ref={canvasRef}  
-                  className="absolute top-0 left-0 pointer-events-none z-10"  
-                />  
+              <div className="max-h-[65vh] overflow-auto rounded-xl border-2 border-gray-300 bg-gray-50 shadow-lg">
+                <div className="relative inline-block w-full">
+                  <img
+                    ref={imagenRef}
+                    src={planoUrl}
+                    alt="Plano del piso"
+                    className="block w-full h-auto"
+                    onLoad={() => {
+                      dibujarPuestoAsignado();
+                    }}
+                  />
+                  <canvas
+                    ref={canvasRef}
+                    className="absolute top-0 left-0 pointer-events-none z-10"
+                  />
+                </div>
               </div>
             </div>
           )}  

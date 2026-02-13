@@ -166,7 +166,7 @@ export default function ReservasLista({
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => onCancelarReserva(reserva.IdEmpleadoPuestoTrabajo)}
+                    onClick={() => onCancelarReserva(reserva.IdEmpleadoPuestoTrabajo, undefined, reserva.IdPuestoTrabajo)}
                     className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-medium"
                   >
                     🗑️ Cancelar Reserva

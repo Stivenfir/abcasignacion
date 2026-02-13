@@ -83,6 +83,9 @@ export function useReservas() {
               NombreArea: area?.NombreArea ?? null,
               UbicacionX: puesto?.UbicacionX ?? null,
               UbicacionY: puesto?.UbicacionY ?? null,
+              NoPuesto: puesto?.NoPuesto ?? puesto?.NumeroPuesto ?? puesto?.Puesto ?? null,
+              NumeroPuesto: puesto?.NumeroPuesto ?? null,
+              Puesto: puesto?.Puesto ?? null,
               Disponible: puesto?.Disponible,
             });
           }
@@ -98,15 +101,19 @@ export function useReservas() {
       if (!info) return reserva;
 
       return {
-        ...info,
         ...reserva,
-        IdPiso: reserva?.IdPiso ?? info.IdPiso,
-        NumeroPiso: reserva?.NumeroPiso ?? info.NumeroPiso,
-        IdArea: reserva?.IdArea ?? info.IdArea,
-        IdAreaPiso: reserva?.IdAreaPiso ?? info.IdAreaPiso,
-        NombreArea: reserva?.NombreArea || info.NombreArea,
-        UbicacionX: reserva?.UbicacionX ?? info.UbicacionX,
-        UbicacionY: reserva?.UbicacionY ?? info.UbicacionY,
+        // Priorizamos datos canónicos del catálogo de puestos para evitar
+        // usar snapshots viejos guardados en la reserva.
+        IdPiso: info.IdPiso ?? reserva?.IdPiso,
+        NumeroPiso: info.NumeroPiso ?? reserva?.NumeroPiso,
+        IdArea: info.IdArea ?? reserva?.IdArea,
+        IdAreaPiso: info.IdAreaPiso ?? reserva?.IdAreaPiso,
+        NombreArea: info.NombreArea || reserva?.NombreArea,
+        NoPuesto: info.NoPuesto ?? reserva?.NoPuesto ?? reserva?.NumeroPuesto ?? reserva?.Puesto,
+        NumeroPuesto: info.NumeroPuesto ?? reserva?.NumeroPuesto,
+        Puesto: info.Puesto ?? reserva?.Puesto,
+        UbicacionX: info.UbicacionX ?? reserva?.UbicacionX,
+        UbicacionY: info.UbicacionY ?? reserva?.UbicacionY,
       };
     });
   };
@@ -206,26 +213,58 @@ export function useReservas() {
     }
   };
 
-  const cancelarReserva = async (idReserva, observacion) => {
+  const cancelarReserva = async (idReserva, observacion, idPuestoTrabajo) => {
+    const observacionIngresada = String(
+      observacion ?? prompt("Escribe la razón de cancelación:"),
+    ).trim();
+
+    if (!observacionIngresada) {
+      setMensaje({ tipo: "error", texto: "✗ Debes indicar una observación para cancelar" });
+      return false;
+    }
+
     if (!confirm("¿Estás seguro de cancelar esta reserva?")) return false;
 
     try {
       const token = localStorage.getItem("token");
 
-      const res = await fetch(`${API}/api/reservas/${idReserva}/cancelar`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          observacion: observacion || "Cancelada por el usuario",
-        }),
-      });
+      const enviarCancelacion = async (esEmergencia = false) => {
+        const res = await fetch(`${API}/api/reservas/${idReserva}/cancelar`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            observacion: esEmergencia
+              ? `${observacionIngresada} (emergencia)`
+              : observacionIngresada,
+            emergencia: esEmergencia,
+            idPuestoTrabajo: idPuestoTrabajo ?? null,
+          }),
+        });
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Error al cancelar reserva");
+        const data = await res.json().catch(() => ({}));
+        return { ok: res.ok, status: res.status, data };
+      };
+
+      let resultado = await enviarCancelacion(false);
+
+      if (!resultado.ok && resultado.data?.code === "CANCELACION_FUERA_DE_TIEMPO") {
+        const confirmarEmergencia = confirm(
+          "La cancelación normal requiere al menos 1 hora de anticipación. ¿Deseas cancelarla como emergencia?",
+        );
+
+        if (!confirmarEmergencia) {
+          setMensaje({ tipo: "error", texto: `✗ ${resultado.data?.error || "Cancelación fuera de tiempo"}` });
+          return false;
+        }
+
+        resultado = await enviarCancelacion(true);
+      }
+
+      if (!resultado.ok) {
+        throw new Error(resultado.data?.error || resultado.data?.message || "Error al cancelar reserva");
       }
 
       setMensaje({ tipo: "success", texto: "✓ Reserva cancelada" });
