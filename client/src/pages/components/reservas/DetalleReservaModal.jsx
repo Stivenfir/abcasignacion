@@ -209,7 +209,7 @@ export default function DetalleReservaModal({
               whileTap={{ scale: 0.98 }}  
               onClick={() => {  
                 if (confirm('¿Estás seguro de cancelar esta reserva?')) {  
-                  onCancelarReserva(reserva.IdEmpleadoPuestoTrabajo);  
+                  onCancelarReserva(reserva.IdEmpleadoPuestoTrabajo, undefined, reserva.IdPuestoTrabajo);  
                   onClose();  
                 }  
               }}  

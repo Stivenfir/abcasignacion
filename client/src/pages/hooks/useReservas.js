@@ -213,7 +213,7 @@ export function useReservas() {
     }
   };
 
-  const cancelarReserva = async (idReserva, observacion) => {
+  const cancelarReserva = async (idReserva, observacion, idPuestoTrabajo) => {
     const observacionIngresada = String(
       observacion ?? prompt("Escribe la razón de cancelación:"),
     ).trim();
@@ -240,6 +240,7 @@ export function useReservas() {
               ? `${observacionIngresada} (emergencia)`
               : observacionIngresada,
             emergencia: esEmergencia,
+            idPuestoTrabajo: idPuestoTrabajo ?? null,
           }),
         });
 

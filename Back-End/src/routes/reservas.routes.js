@@ -513,7 +513,7 @@ router.post("/", authenticateToken, async (req, res) => {
 // PUT - Cancelar una reserva        
 router.put("/:idReserva/cancelar", authenticateToken, async (req, res) => {        
   const { idReserva } = req.params;        
-  const { observacion, emergencia } = req.body;  // ✅ observacion + flag emergencia    
+  const { observacion, emergencia, idPuestoTrabajo } = req.body;  // ✅ observacion + flag emergencia    
   const idEmpleado = req.user.idEmpleado;  // ✅ Del token JWT    
   const usuario = req.user.username;        
         
@@ -527,7 +527,8 @@ router.put("/:idReserva/cancelar", authenticateToken, async (req, res) => {
   logAuditoria('CANCELAR_RESERVA', usuario, {        
     idReserva,        
     idEmpleado,        
-    observacion        
+    observacion,
+    idPuestoTrabajo: idPuestoTrabajo ?? null
   });        
         
   try {        
@@ -566,8 +567,18 @@ router.put("/:idReserva/cancelar", authenticateToken, async (req, res) => {
       }
     }
 
-    // SP_EditReservas con @P=1 para cancelar reserva        
-    var Rta = await GetData(`EditReservas=@P%3D1,@IdEmpleadoPuestoTrabajo%3D${idReserva},@Obs%3D${encodeURIComponent(observacion)},@IdEmpleado%3D${idEmpleado}`);        
+    const idPuestoEfectivo = Number(idPuestoTrabajo) || Number(reserva?.IdPuestoTrabajo) || null;
+
+    // SP_EditReservas con @P=1 para cancelar reserva
+    const parametrosCancelacion = [
+      `EditReservas=@P%3D1`,
+      `@IdEmpleadoPuestoTrabajo%3D${idReserva}`,
+      `@Obs%3D${encodeURIComponent(observacion)}`,
+      `@IdEmpleado%3D${idEmpleado}`,
+      idPuestoEfectivo ? `@IdPuestoTrabajo%3D${idPuestoEfectivo}` : null,
+    ].filter(Boolean).join(',');
+
+    var Rta = await GetData(parametrosCancelacion);        
         
     // ✅ Validar formato PHP inválido      
     if (!Rta || Rta.trim().startsWith('Array') || Rta.trim().startsWith(':')) {        
