@@ -214,6 +214,15 @@ export function useReservas() {
   };
 
   const cancelarReserva = async (idReserva, observacion) => {
+    const observacionIngresada = String(
+      observacion ?? prompt("Escribe la razón de cancelación:"),
+    ).trim();
+
+    if (!observacionIngresada) {
+      setMensaje({ tipo: "error", texto: "✗ Debes indicar una observación para cancelar" });
+      return false;
+    }
+
     if (!confirm("¿Estás seguro de cancelar esta reserva?")) return false;
 
     try {
@@ -227,7 +236,9 @@ export function useReservas() {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            observacion: observacion || (esEmergencia ? "Cancelación de emergencia" : "Cancelada por el usuario"),
+            observacion: esEmergencia
+              ? `${observacionIngresada} (emergencia)`
+              : observacionIngresada,
             emergencia: esEmergencia,
           }),
         });
